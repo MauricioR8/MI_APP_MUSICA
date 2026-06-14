@@ -89,4 +89,23 @@ class MediaStoreSource @Inject constructor(
     fun notifyChanged(uri: Uri) {
         runCatching { context.contentResolver.notifyChange(uri, null) }
     }
+
+    /**
+     * Builds a system delete-confirmation request (API 30+). The OS shows a dialog and performs
+     * the deletion itself when the user approves. Returns null on API < 30 or for an empty list.
+     */
+    fun buildDeleteRequest(uris: List<Uri>): android.content.IntentSender? {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return null
+        if (uris.isEmpty()) return null
+        return MediaStore.createDeleteRequest(context.contentResolver, uris).intentSender
+    }
+
+    /** Direct deletion path for API < 30. Returns the number of rows deleted. */
+    suspend fun deleteDirect(uris: List<Uri>): Int = withContext(Dispatchers.IO) {
+        var n = 0
+        uris.forEach { uri ->
+            runCatching { context.contentResolver.delete(uri, null, null) }.onSuccess { n += it }
+        }
+        n
+    }
 }

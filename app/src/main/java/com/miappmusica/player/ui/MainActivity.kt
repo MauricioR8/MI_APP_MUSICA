@@ -54,6 +54,8 @@ class MainActivity : ComponentActivity() {
                 .takeIf { !it.isNormal }
                 ?.accentColor()
 
+            val userAccent: Color? = settings.accentColorArgb.takeIf { it != 0L }?.let { Color(it) }
+
             val darkTheme = when (settings.darkMode) {
                 DarkMode.SYSTEM -> isSystemInDarkTheme()
                 DarkMode.LIGHT -> false
@@ -62,8 +64,9 @@ class MainActivity : ComponentActivity() {
 
             MiAppMusicaTheme(
                 darkTheme = darkTheme,
-                dynamicColor = settings.dynamicColor,
-                modeAccent = accent
+                dynamicColor = settings.dynamicColor && settings.accentColorArgb == 0L,
+                modeAccent = accent,
+                userAccent = userAccent
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),

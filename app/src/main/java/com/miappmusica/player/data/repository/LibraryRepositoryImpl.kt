@@ -36,4 +36,13 @@ class LibraryRepositoryImpl @Inject constructor(
         val byId = tracksFlow.value.associateBy { it.id }
         return ids.mapNotNull { byId[it] }
     }
+
+    override fun buildDeleteRequest(uris: List<String>): android.content.IntentSender? =
+        mediaStore.buildDeleteRequest(uris.map { android.net.Uri.parse(it) })
+
+    override suspend fun deleteDirect(uris: List<String>): Int {
+        val deleted = mediaStore.deleteDirect(uris.map { android.net.Uri.parse(it) })
+        refresh()
+        return deleted
+    }
 }

@@ -87,6 +87,23 @@ private fun SelectionPhase(state: MetadataUiState, vm: MetadataViewModel) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("Limpieza de metadatos", style = MaterialTheme.typography.titleLarge)
 
+        // Source toggle: all songs vs only downloaded
+        Row(
+            Modifier.padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = state.source == MetadataSource.ALL,
+                onClick = { vm.setSource(MetadataSource.ALL) },
+                label = { Text("Todas") }
+            )
+            FilterChip(
+                selected = state.source == MetadataSource.DOWNLOADS,
+                onClick = { vm.setSource(MetadataSource.DOWNLOADS) },
+                label = { Text("Descargados") }
+            )
+        }
+
         // Context detection banner
         state.context?.let { ctx ->
             Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {

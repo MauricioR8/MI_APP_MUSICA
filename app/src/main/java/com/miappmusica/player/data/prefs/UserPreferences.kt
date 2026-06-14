@@ -3,6 +3,7 @@ package com.miappmusica.player.data.prefs
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.miappmusica.player.domain.model.AppMode
@@ -25,6 +26,9 @@ class UserPreferences @Inject constructor(
     private val darkModeKey = stringPreferencesKey("dark_mode")
     private val samsungHomeKey = booleanPreferencesKey("samsung_home")
     private val autoArtworkKey = booleanPreferencesKey("auto_artwork_online")
+    private val accentColorKey = longPreferencesKey("accent_color")
+    private val lyricsEnabledKey = booleanPreferencesKey("lyrics_enabled")
+    private val lyricsOfflineOnlyKey = booleanPreferencesKey("lyrics_offline_only")
 
     val activeModeId: Flow<String> = context.dataStore.data
         .map { it[activeModeKey] ?: AppMode.NORMAL_ID }
@@ -39,7 +43,10 @@ class UserPreferences @Inject constructor(
             darkMode = prefs[darkModeKey]?.let { runCatching { DarkMode.valueOf(it) }.getOrNull() }
                 ?: DarkMode.SYSTEM,
             samsungHome = prefs[samsungHomeKey] ?: true,
-            autoArtworkOnline = prefs[autoArtworkKey] ?: true
+            autoArtworkOnline = prefs[autoArtworkKey] ?: true,
+            accentColorArgb = prefs[accentColorKey] ?: 0L,
+            lyricsEnabled = prefs[lyricsEnabledKey] ?: true,
+            lyricsOfflineOnly = prefs[lyricsOfflineOnlyKey] ?: false
         )
     }
 
@@ -57,5 +64,17 @@ class UserPreferences @Inject constructor(
 
     suspend fun setAutoArtworkOnline(enabled: Boolean) {
         context.dataStore.edit { it[autoArtworkKey] = enabled }
+    }
+
+    suspend fun setAccentColor(argb: Long) {
+        context.dataStore.edit { it[accentColorKey] = argb }
+    }
+
+    suspend fun setLyricsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[lyricsEnabledKey] = enabled }
+    }
+
+    suspend fun setLyricsOfflineOnly(enabled: Boolean) {
+        context.dataStore.edit { it[lyricsOfflineOnlyKey] = enabled }
     }
 }

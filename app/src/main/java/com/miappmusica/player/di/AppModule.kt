@@ -2,7 +2,10 @@ package com.miappmusica.player.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.miappmusica.player.data.local.AppDatabase
+import com.miappmusica.player.data.local.dao.LyricsDao
 import com.miappmusica.player.data.local.dao.ModeDao
 import com.miappmusica.player.data.local.dao.PlaylistDao
 import dagger.Module
@@ -18,10 +21,21 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
+    private val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS lyrics (" +
+                    "trackId INTEGER NOT NULL, artist TEXT NOT NULL, title TEXT NOT NULL, " +
+                    "text TEXT NOT NULL, savedAt INTEGER NOT NULL, PRIMARY KEY(trackId))"
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
+            .addMigrations(MIGRATION_1_2)
             .fallbackToDestructiveMigration()
             .build()
 
@@ -30,6 +44,9 @@ object AppModule {
 
     @Provides
     fun provideModeDao(db: AppDatabase): ModeDao = db.modeDao()
+
+    @Provides
+    fun provideLyricsDao(db: AppDatabase): LyricsDao = db.lyricsDao()
 
     @Provides
     @Singleton

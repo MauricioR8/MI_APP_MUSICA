@@ -13,15 +13,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.miappmusica.player.data.repository.LyricsResult
+import com.miappmusica.player.domain.model.Track
 import com.miappmusica.player.playback.NowPlayingState
 import java.util.Locale
 
@@ -127,105 +138,228 @@ fun NowPlayingScreen(
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
     onCollapse: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    currentTrack: Track? = null,
+    lyrics: LyricsResult = LyricsResult.Loading,
+    lyricsDownloaded: Boolean = false,
+    onLoadLyrics: () -> Unit = {},
+    onDownloadLyrics: () -> Unit = {}
 ) {
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
+    var showInfo by remember { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
 
     val duration = state.durationMs.coerceAtLeast(1L)
     val sliderValue = if (dragging) dragValue else state.positionMs.toFloat().coerceIn(0f, duration.toFloat())
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(20.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onCollapse) {
-                Icon(Icons.Filled.KeyboardArrowDown, "Minimizar")
-            }
-            Text("Reproduciendo ahora", style = MaterialTheme.typography.titleLarge)
-        }
-
-        Box(
+    Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 24.dp)
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
+                .fillMaxSize()
+                .padding(20.dp)
         ) {
-            if (state.artworkUri != null) {
-                AsyncImage(
-                    model = state.artworkUri,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onCollapse) {
+                    Icon(Icons.Filled.KeyboardArrowDown, "Minimizar")
+                }
+                Text(
+                    "Reproduciendo ahora",
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
-            } else {
-                Icon(Icons.Filled.MusicNote, null, modifier = Modifier.size(96.dp))
+                // Lyrics ("ver letras") + song info ("hoja con líneas") actions
+                IconButton(onClick = {
+                    showLyrics = true
+                    onLoadLyrics()
+                }) {
+                    Icon(Icons.Filled.Lyrics, "Ver letras")
+                }
+                IconButton(onClick = { showInfo = true }) {
+                    Icon(Icons.Filled.Description, "Información de la canción")
+                }
             }
-        }
 
-        Text(
-            state.title,
-            style = MaterialTheme.typography.titleLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            state.artist,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Slider(
-            value = sliderValue,
-            onValueChange = { dragging = true; dragValue = it },
-            onValueChangeFinished = {
-                dragging = false
-                onSeek(dragValue.toLong())
-            },
-            valueRange = 0f..duration.toFloat(),
-            modifier = Modifier.padding(top = 16.dp)
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatTime(sliderValue.toLong()), style = MaterialTheme.typography.labelSmall)
-            Text(formatTime(state.durationMs), style = MaterialTheme.typography.labelSmall)
-        }
-
-        Spacer(Modifier.weight(1f))
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onPrevious, modifier = Modifier.size(64.dp)) {
-                Icon(Icons.Filled.SkipPrevious, "Anterior", modifier = Modifier.size(40.dp))
-            }
-            Spacer(Modifier.width(16.dp))
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White,
-                modifier = Modifier.size(72.dp).clickable(onClick = onTogglePlay)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp)
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        "Reproducir/Pausar",
-                        modifier = Modifier.size(40.dp)
+                if (state.artworkUri != null) {
+                    AsyncImage(
+                        model = state.artworkUri,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(Icons.Filled.MusicNote, null, modifier = Modifier.size(96.dp))
+                }
+            }
+
+            Text(
+                state.title,
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                state.artist,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Slider(
+                value = sliderValue,
+                onValueChange = { dragging = true; dragValue = it },
+                onValueChangeFinished = {
+                    dragging = false
+                    onSeek(dragValue.toLong())
+                },
+                valueRange = 0f..duration.toFloat(),
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(formatTime(sliderValue.toLong()), style = MaterialTheme.typography.labelSmall)
+                Text(formatTime(state.durationMs), style = MaterialTheme.typography.labelSmall)
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onPrevious, modifier = Modifier.size(64.dp)) {
+                    Icon(Icons.Filled.SkipPrevious, "Anterior", modifier = Modifier.size(40.dp))
+                }
+                Spacer(Modifier.width(16.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                    modifier = Modifier.size(72.dp).clickable(onClick = onTogglePlay)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            "Reproducir/Pausar",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                IconButton(onClick = onNext, modifier = Modifier.size(64.dp)) {
+                    Icon(Icons.Filled.SkipNext, "Siguiente", modifier = Modifier.size(40.dp))
+                }
+            }
+        }
+
+        // Lyrics overlay: dims the player and shows the lyrics on top. Playback keeps running.
+        if (showLyrics) {
+            LyricsOverlay(
+                lyrics = lyrics,
+                downloaded = lyricsDownloaded,
+                onDownload = onDownloadLyrics,
+                onClose = { showLyrics = false }
+            )
+        }
+    }
+
+    if (showInfo) {
+        currentTrack?.let { track ->
+            TrackInfoDialog(track = track, onDismiss = { showInfo = false })
+        }
+    }
+}
+
+@Composable
+private fun LyricsOverlay(
+    lyrics: LyricsResult,
+    downloaded: Boolean,
+    onDownload: () -> Unit,
+    onClose: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.78f))
+            .clickable(onClick = onClose)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Letras",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, "Cerrar", tint = Color.White)
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.TopStart
+            ) {
+                when (lyrics) {
+                    LyricsResult.Loading -> CircularProgressIndicator(
+                        Modifier.align(Alignment.Center),
+                        color = Color.White
+                    )
+                    is LyricsResult.Available -> Text(
+                        text = lyrics.text,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White,
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    )
+                    LyricsResult.NotFound -> Text(
+                        "No se encontraron letras",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White
+                    )
+                    LyricsResult.Disabled -> Text(
+                        "Activa las letras en Ajustes",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White
+                    )
+                    is LyricsResult.Error -> Text(
+                        lyrics.message,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White
                     )
                 }
             }
-            Spacer(Modifier.width(16.dp))
-            IconButton(onClick = onNext, modifier = Modifier.size(64.dp)) {
-                Icon(Icons.Filled.SkipNext, "Siguiente", modifier = Modifier.size(40.dp))
+
+            Button(
+                onClick = onDownload,
+                enabled = !downloaded,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    if (downloaded) Icons.Filled.DownloadDone else Icons.Filled.Download,
+                    null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(if (downloaded) "Descargada" else "Descargar")
             }
         }
     }

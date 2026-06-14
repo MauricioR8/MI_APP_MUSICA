@@ -71,6 +71,9 @@ fun AppRoot(
     val navController = rememberNavController()
     val modesState by modesViewModel.state.collectAsStateWithLifecycle()
     val nowPlaying by playerViewModel.nowPlaying.collectAsStateWithLifecycle()
+    val currentTrack by playerViewModel.currentTrack.collectAsStateWithLifecycle()
+    val lyrics by playerViewModel.lyrics.collectAsStateWithLifecycle()
+    val lyricsDownloaded by playerViewModel.isLyricsDownloaded.collectAsStateWithLifecycle()
 
     var showPlayer by remember { mutableStateOf(false) }
 
@@ -159,7 +162,12 @@ fun AppRoot(
                     onNext = playerViewModel::next,
                     onPrevious = playerViewModel::previous,
                     onSeek = playerViewModel::seekTo,
-                    onCollapse = { showPlayer = false }
+                    onCollapse = { showPlayer = false },
+                    currentTrack = currentTrack,
+                    lyrics = lyrics,
+                    lyricsDownloaded = lyricsDownloaded,
+                    onLoadLyrics = playerViewModel::loadLyrics,
+                    onDownloadLyrics = playerViewModel::downloadLyrics
                 )
             }
         }

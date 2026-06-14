@@ -35,4 +35,16 @@ class SettingsViewModel @Inject constructor(
     fun setAutoArtwork(enabled: Boolean) {
         viewModelScope.launch { prefs.setAutoArtworkOnline(enabled) }
     }
+
+    fun setAccentColor(argb: Long) {
+        viewModelScope.launch { prefs.setAccentColor(argb) }
+    }
+
+    fun setLyricsEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setLyricsEnabled(enabled) }
+    }
+
+    fun setLyricsOfflineOnly(enabled: Boolean) {
+        viewModelScope.launch { prefs.setLyricsOfflineOnly(enabled) }
+    }
 }

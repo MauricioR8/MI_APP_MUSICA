@@ -1,6 +1,8 @@
 package com.miappmusica.player.feature.library
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -32,6 +35,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +57,18 @@ fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    val deleteLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        viewModel.onDeleteResult(result.resultCode == android.app.Activity.RESULT_OK)
+    }
+    LaunchedEffect(state.pendingDeleteRequest) {
+        state.pendingDeleteRequest?.let {
+            deleteLauncher.launch(it)
+            viewModel.consumeDeleteRequest()
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         when {
@@ -85,6 +101,14 @@ fun LibraryScreen(
                                 Icon(Icons.Filled.PlaylistAdd, null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("Crear lista")
+                            }
+                            TextButton(
+                                onClick = { viewModel.requestDeleteSelected() },
+                                enabled = state.selectedIds.isNotEmpty()
+                            ) {
+                                Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Eliminar")
                             }
                         }
                     }

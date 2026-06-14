@@ -23,7 +23,8 @@ data class LibraryUiState(
     val isolatedTitle: String? = null,
     val selectionMode: Boolean = false,
     val selectedIds: Set<Long> = emptySet(),
-    val showCreatePlaylist: Boolean = false
+    val showCreatePlaylist: Boolean = false,
+    val pendingDeleteRequest: androidx.activity.result.IntentSenderRequest? = null
 )
 
 @HiltViewModel
@@ -63,7 +64,8 @@ class LibraryViewModel @Inject constructor(
         base.copy(
             selectionMode = extras.selectionMode,
             selectedIds = extras.selectedIds,
-            showCreatePlaylist = extras.showCreatePlaylist
+            showCreatePlaylist = extras.showCreatePlaylist,
+            pendingDeleteRequest = extras.pendingDeleteRequest
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
@@ -123,10 +125,43 @@ class LibraryViewModel @Inject constructor(
             _uiExtras.value = _uiExtras.value.copy(showCreatePlaylist = false)
         }
     }
+
+    // --- Delete songs from the device ---
+
+    fun requestDeleteSelected() {
+        val ids = _uiExtras.value.selectedIds
+        if (ids.isEmpty()) return
+        val uris = state.value.tracks.filter { ids.contains(it.id) }.map { it.uri }
+        if (uris.isEmpty()) return
+        val sender = libraryRepository.buildDeleteRequest(uris)
+        if (sender != null) {
+            _uiExtras.value = _uiExtras.value.copy(
+                pendingDeleteRequest = androidx.activity.result.IntentSenderRequest.Builder(sender).build()
+            )
+        } else {
+            // API < 30: delete directly.
+            viewModelScope.launch {
+                libraryRepository.deleteDirect(uris)
+                exitSelectionMode()
+            }
+        }
+    }
+
+    fun consumeDeleteRequest() {
+        _uiExtras.value = _uiExtras.value.copy(pendingDeleteRequest = null)
+    }
+
+    fun onDeleteResult(granted: Boolean) {
+        if (granted) {
+            viewModelScope.launch { libraryRepository.refresh() }
+        }
+        exitSelectionMode()
+    }
 }
 
 private data class LibraryUiExtras(
     val selectionMode: Boolean = false,
     val selectedIds: Set<Long> = emptySet(),
-    val showCreatePlaylist: Boolean = false
+    val showCreatePlaylist: Boolean = false,
+    val pendingDeleteRequest: androidx.activity.result.IntentSenderRequest? = null
 )

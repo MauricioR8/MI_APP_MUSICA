@@ -14,6 +14,12 @@ interface LibraryRepository {
     suspend fun refresh()
     suspend fun getTrack(id: Long): Track?
     suspend fun getTracks(ids: List<Long>): List<Track>
+
+    /** Builds a system delete-confirmation request (API 30+) for the given track URIs, or null. */
+    fun buildDeleteRequest(uris: List<String>): android.content.IntentSender?
+
+    /** Deletes the given track URIs directly (API < 30) and refreshes the library. Returns rows deleted. */
+    suspend fun deleteDirect(uris: List<String>): Int
 }
 
 interface PlaylistRepository {

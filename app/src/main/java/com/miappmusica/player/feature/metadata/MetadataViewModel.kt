@@ -20,10 +20,13 @@ import javax.inject.Inject
 
 enum class MetadataPhase { SELECTION, PREVIEW, DONE }
 enum class CleanMode { MANUAL, AUTO }
+enum class MetadataSource { ALL, DOWNLOADS }
 
 data class MetadataUiState(
     val phase: MetadataPhase = MetadataPhase.SELECTION,
-    val candidates: List<Track> = emptyList(),
+    val allTracks: List<Track> = emptyList(),
+    val downloads: List<Track> = emptyList(),
+    val source: MetadataSource = MetadataSource.ALL,
     val selectedIds: Set<Long> = emptySet(),
     val mode: CleanMode = CleanMode.AUTO,
     val context: ContextDetection? = null,
@@ -32,6 +35,7 @@ data class MetadataUiState(
     val resultMessage: String? = null,
     val pendingWriteRequest: androidx.activity.result.IntentSenderRequest? = null
 ) {
+    val candidates: List<Track> get() = if (source == MetadataSource.ALL) allTracks else downloads
     val selectedCount: Int get() = selectedIds.size
     val acceptedChanges: Int get() = diffs.count { it.accepted && it.hasChanges }
 }
@@ -47,11 +51,18 @@ class MetadataViewModel @Inject constructor(
     val state: StateFlow<MetadataUiState> = _state.asStateFlow()
 
     init {
-        // The metadata tool focuses on externally-downloaded audios by default.
+        // Observe both the full library and downloads; the user can toggle which set to clean.
+        libraryRepository.observeTracks()
+            .onEach { tracks -> _state.value = _state.value.copy(allTracks = tracks) }
+            .launchIn(viewModelScope)
         libraryRepository.observeDownloads()
-            .onEach { downloads -> _state.value = _state.value.copy(candidates = downloads) }
+            .onEach { downloads -> _state.value = _state.value.copy(downloads = downloads) }
             .launchIn(viewModelScope)
         viewModelScope.launch { libraryRepository.refresh() }
+    }
+
+    fun setSource(src: MetadataSource) {
+        _state.value = _state.value.copy(source = src, selectedIds = emptySet(), context = null)
     }
 
     fun toggleSelect(id: Long) {

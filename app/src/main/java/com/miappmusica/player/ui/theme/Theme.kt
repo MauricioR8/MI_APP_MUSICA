@@ -44,6 +44,7 @@ fun MiAppMusicaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     modeAccent: Color? = null,
+    userAccent: Color? = null,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -55,16 +56,18 @@ fun MiAppMusicaTheme(
         else -> LightColors
     }
 
-    val scheme = if (modeAccent != null) {
-        val tintTarget = if (darkTheme) Color.Black else Color.White
-        base.copy(
-            primary = modeAccent,
-            secondary = modeAccent,
-            background = lerp(modeAccent, tintTarget, if (darkTheme) 0.82f else 0.90f),
-            surface = lerp(modeAccent, tintTarget, if (darkTheme) 0.75f else 0.86f)
-        )
-    } else {
-        base
+    val scheme = when {
+        modeAccent != null -> {
+            val tintTarget = if (darkTheme) Color.Black else Color.White
+            base.copy(
+                primary = modeAccent,
+                secondary = modeAccent,
+                background = lerp(modeAccent, tintTarget, if (darkTheme) 0.82f else 0.90f),
+                surface = lerp(modeAccent, tintTarget, if (darkTheme) 0.75f else 0.86f)
+            )
+        }
+        userAccent != null -> base.copy(primary = userAccent, secondary = userAccent)
+        else -> base
     }
 
     MaterialTheme(
