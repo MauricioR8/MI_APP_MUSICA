@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,20 +79,27 @@ fun AppRoot(
     val playerBg = playerBackground.takeIf { it != 0L }?.let { androidx.compose.ui.graphics.Color(it) }
 
     var showPlayer by remember { mutableStateOf(false) }
+    // The Modes bar is hidden by default; the user reveals it with the Tune toggle in the top bar.
+    var showModeBar by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
                 Column {
-                    ModeBar(
-                        state = modesState,
-                        onActivate = modesViewModel::activate,
-                        onExit = modesViewModel::exitToNormal
-                    )
+                    if (showModeBar) {
+                        ModeBar(
+                            state = modesState,
+                            onActivate = modesViewModel::activate,
+                            onExit = modesViewModel::exitToNormal
+                        )
+                    }
                     TopAppBar(
                         title = { Text("MI APP MUSICA") },
                         actions = {
+                            IconButton(onClick = { showModeBar = !showModeBar }) {
+                                Icon(Icons.Filled.Tune, contentDescription = "Modos")
+                            }
                             IconButton(onClick = { playerViewModel.refreshLibrary() }) {
                                 Icon(Icons.Filled.Refresh, contentDescription = "Refrescar biblioteca")
                             }

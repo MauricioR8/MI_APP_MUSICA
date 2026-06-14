@@ -77,7 +77,23 @@ fun MetadataScreen(
             MetadataPhase.DONE -> DonePhase(state, viewModel)
         }
         if (state.isProcessing) {
-            CircularProgressIndicator(Modifier.align(Alignment.Center))
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (state.total > 0) {
+                    CircularProgressIndicator(
+                        progress = { state.progress.toFloat() / state.total.toFloat() }
+                    )
+                    Text(
+                        "Procesando ${state.progress}/${state.total}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    CircularProgressIndicator()
+                }
+            }
         }
     }
 }

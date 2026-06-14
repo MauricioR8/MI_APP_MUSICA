@@ -15,7 +15,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 enum class MetadataPhase { SELECTION, PREVIEW, DONE }
@@ -32,6 +40,8 @@ data class MetadataUiState(
     val context: ContextDetection? = null,
     val diffs: List<MetadataDiff> = emptyList(),
     val isProcessing: Boolean = false,
+    val progress: Int = 0,
+    val total: Int = 0,
     val resultMessage: String? = null,
     val pendingWriteRequest: androidx.activity.result.IntentSenderRequest? = null
 ) {
@@ -103,41 +113,54 @@ class MetadataViewModel @Inject constructor(
         if (selected.isEmpty()) return
 
         viewModelScope.launch {
-            _state.value = _state.value.copy(isProcessing = true)
+            _state.update { it.copy(isProcessing = true, progress = 0, total = selected.size) }
             val ctx = contextDetector.analyze(selected)
-            val diffs = when (_state.value.mode) {
-                CleanMode.AUTO -> selected.mapNotNull { track ->
-                    try {
-                        val diff = metadataRepository.buildAutoProposal(track)
-                        // When the engine is confident about a single album, propagate it across the batch.
-                        if (ctx.isSingleAlbum && ctx.dominantAlbum != null) {
-                            diff.copy(proposed = diff.proposed.copy(album = ctx.dominantAlbum))
-                        } else diff
-                    } catch (_: Exception) {
-                        // Graceful degradation: if a track fails, build a no-change identity diff.
-                        try {
-                            val original = metadataRepository.read(track)
-                            MetadataDiff(track.id, track.uri, original, original)
-                        } catch (_: Exception) {
-                            null // Skip completely broken tracks
+            val mode = _state.value.mode
+            val done = AtomicInteger(0)
+            // Bounded concurrency keeps ~1000 songs flowing without exhausting threads/sockets.
+            val sem = Semaphore(8)
+            val built = coroutineScope {
+                selected.map { track ->
+                    async(Dispatchers.IO) {
+                        sem.withPermit {
+                            val diff: MetadataDiff? = try {
+                                if (mode == CleanMode.MANUAL) {
+                                    // MANUAL needs no network: seed an identity diff to edit inline.
+                                    val original = metadataRepository.read(track)
+                                    MetadataDiff(track.id, track.uri, original, original)
+                                } else {
+                                    metadataRepository.buildAutoProposal(track)
+                                }
+                            } catch (_: Exception) {
+                                // Graceful degradation: fall back to a no-change identity diff.
+                                try {
+                                    val original = metadataRepository.read(track)
+                                    MetadataDiff(track.id, track.uri, original, original)
+                                } catch (_: Exception) {
+                                    null // Skip completely broken tracks
+                                }
+                            }
+                            val n = done.incrementAndGet()
+                            _state.update { it.copy(progress = n) }
+                            diff
                         }
                     }
-                }
-                CleanMode.MANUAL -> selected.mapNotNull { track ->
-                    try {
-                        val original = metadataRepository.read(track)
-                        MetadataDiff(track.id, track.uri, original, original)
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
+                }.awaitAll().filterNotNull()
             }
-            _state.value = _state.value.copy(
-                isProcessing = false,
-                phase = MetadataPhase.PREVIEW,
-                context = ctx,
-                diffs = diffs
-            )
+            // When the engine is confident about a single album, propagate it across the batch.
+            val finalDiffs = if (mode == CleanMode.AUTO && ctx.isSingleAlbum && ctx.dominantAlbum != null) {
+                built.map { it.copy(proposed = it.proposed.copy(album = ctx.dominantAlbum!!)) }
+            } else built
+            _state.update {
+                it.copy(
+                    isProcessing = false,
+                    phase = MetadataPhase.PREVIEW,
+                    context = ctx,
+                    diffs = finalDiffs,
+                    progress = 0,
+                    total = 0
+                )
+            }
         }
     }
 
@@ -193,28 +216,44 @@ class MetadataViewModel @Inject constructor(
 
     private fun performWrites() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isProcessing = true)
-            var ok = 0
-            val failures = mutableListOf<String>()
-            _state.value.diffs.filter { it.accepted }.forEach { diff ->
-                metadataRepository.apply(diff).fold(
-                    onSuccess = { ok++ },
-                    onFailure = { e -> failures.add("• ${diff.proposed.title}: ${e.message ?: "error desconocido"}") }
-                )
+            val accepted = _state.value.diffs.filter { it.accepted }
+            _state.update { it.copy(isProcessing = true, progress = 0, total = accepted.size) }
+            val ok = AtomicInteger(0)
+            val done = AtomicInteger(0)
+            // ContentResolver writes are heavier; use a smaller concurrency limit.
+            val failures = java.util.Collections.synchronizedList(mutableListOf<String>())
+            val sem = Semaphore(4)
+            coroutineScope {
+                accepted.map { diff ->
+                    async(Dispatchers.IO) {
+                        sem.withPermit {
+                            metadataRepository.apply(diff).fold(
+                                onSuccess = { ok.incrementAndGet() },
+                                onFailure = { e -> failures.add("• ${diff.proposed.title}: ${e.message ?: "error desconocido"}") }
+                            )
+                            val n = done.incrementAndGet()
+                            _state.update { it.copy(progress = n) }
+                        }
+                    }
+                }.awaitAll()
             }
             libraryRepository.refresh()
             val msg = buildString {
-                append("Aplicados $ok")
+                append("Aplicados ${ok.get()}")
                 if (failures.isNotEmpty()) {
                     append(" • Fallidos ${failures.size}\n\nDetalle del fallo:\n")
-                    append(failures.take(8).joinToString("\n"))
+                    append(failures.take(10).joinToString("\n"))
                 }
             }
-            _state.value = _state.value.copy(
-                isProcessing = false,
-                phase = MetadataPhase.DONE,
-                resultMessage = msg
-            )
+            _state.update {
+                it.copy(
+                    isProcessing = false,
+                    phase = MetadataPhase.DONE,
+                    resultMessage = msg,
+                    progress = 0,
+                    total = 0
+                )
+            }
         }
     }
 

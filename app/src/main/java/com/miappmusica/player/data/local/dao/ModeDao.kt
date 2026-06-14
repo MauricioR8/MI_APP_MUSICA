@@ -16,6 +16,9 @@ interface ModeDao {
     @Query("SELECT COUNT(*) FROM modes")
     suspend fun count(): Int
 
+    @Query("SELECT * FROM modes WHERE id = :id")
+    suspend fun getById(id: String): ModeEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(mode: ModeEntity)
 

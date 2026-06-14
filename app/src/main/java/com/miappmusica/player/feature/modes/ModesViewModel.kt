@@ -49,8 +49,16 @@ class ModesViewModel @Inject constructor(
      */
     fun activate(modeId: String) {
         viewModelScope.launch {
+            var mode = state.value.modes.firstOrNull { it.id == modeId } ?: return@launch
+            // Lazily give each non-Normal mode its OWN private playlist the first time it is
+            // selected. This guarantees independent memory: e.g. Tristeza and Concentración keep
+            // distinct song lists instead of both showing the full library.
+            if (!mode.isNormal && mode.isolatedPlaylistId == null) {
+                val pid = playlistRepository.create("Modo: ${mode.label}")
+                mode = mode.copy(isolatedPlaylistId = pid)
+                modeRepository.upsert(mode) // preserves sortOrder
+            }
             modeRepository.activate(modeId)
-            val mode = state.value.modes.firstOrNull { it.id == modeId } ?: return@launch
             val playlistId = mode.isolatedPlaylistId
             if (mode.autoPlay && playlistId != null) {
                 val playlist = playlistRepository.getPlaylist(playlistId) ?: return@launch

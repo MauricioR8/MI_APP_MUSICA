@@ -37,7 +37,10 @@ class ModeRepositoryImpl @Inject constructor(
     override suspend fun activate(modeId: String) = prefs.setActiveModeId(modeId)
 
     override suspend fun upsert(mode: AppMode) {
-        val sortOrder = dao.nextSortOrder()
+        // Preserve the existing sortOrder when updating so editing a mode (e.g. auto-assigning
+        // its private playlist) does NOT reorder the list. New modes go to the end.
+        val existing = dao.getById(mode.id)
+        val sortOrder = existing?.sortOrder ?: dao.nextSortOrder()
         dao.upsert(ModeEntity.from(mode, sortOrder))
     }
 
