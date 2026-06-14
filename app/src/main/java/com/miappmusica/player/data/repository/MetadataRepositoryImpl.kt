@@ -6,12 +6,14 @@ import com.miappmusica.player.data.mediastore.MediaStoreSource
 import com.miappmusica.player.data.metadata.ArtworkProvider
 import com.miappmusica.player.data.metadata.MetadataFormatter
 import com.miappmusica.player.data.metadata.TagIo
+import com.miappmusica.player.data.prefs.UserPreferences
 import com.miappmusica.player.domain.model.MetadataDiff
 import com.miappmusica.player.domain.model.Track
 import com.miappmusica.player.domain.model.TrackMetadata
 import com.miappmusica.player.domain.repository.MetadataRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -25,7 +27,8 @@ class MetadataRepositoryImpl @Inject constructor(
     private val formatter: MetadataFormatter,
     private val artworkProvider: ArtworkProvider,
     private val mediaStore: MediaStoreSource,
-    private val httpClient: OkHttpClient
+    private val httpClient: OkHttpClient,
+    private val userPreferences: UserPreferences
 ) : MetadataRepository {
 
     override suspend fun read(track: Track): TrackMetadata {
@@ -46,8 +49,9 @@ class MetadataRepositoryImpl @Inject constructor(
         val cleanedArtist = formatter.cleanString(baseArtist)
         val cleanedTitle = formatter.cleanString(splitTitle)
 
-        // 2) Online enrichment (canonical names + high-res artwork).
-        val lookup = artworkProvider.lookup(cleanedArtist, cleanedTitle)
+        // 2) Online enrichment (canonical names + high-res artwork), if enabled in Settings.
+        val online = userPreferences.settings.first().autoArtworkOnline
+        val lookup = if (online) artworkProvider.lookup(cleanedArtist, cleanedTitle) else null
 
         val proposed = TrackMetadata(
             title = cleanedTitle,

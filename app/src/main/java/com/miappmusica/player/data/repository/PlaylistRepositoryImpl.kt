@@ -32,6 +32,8 @@ class PlaylistRepositoryImpl @Inject constructor(
 
     override suspend fun rename(id: Long, name: String) = dao.rename(id, name)
 
+    override suspend fun setCover(id: Long, coverUri: String?) = dao.setCover(id, coverUri)
+
     override suspend fun delete(id: Long) = dao.deletePlaylist(id)
 
     override suspend fun setTracks(playlistId: Long, trackIds: List<Long>) =

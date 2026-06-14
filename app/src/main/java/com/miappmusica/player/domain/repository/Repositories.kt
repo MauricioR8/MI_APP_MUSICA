@@ -20,6 +20,7 @@ interface PlaylistRepository {
     fun observePlaylists(): Flow<List<Playlist>>
     suspend fun create(name: String, description: String = ""): Long
     suspend fun rename(id: Long, name: String)
+    suspend fun setCover(id: Long, coverUri: String?)
     suspend fun delete(id: Long)
     suspend fun setTracks(playlistId: Long, trackIds: List<Long>)
     suspend fun addTrack(playlistId: Long, trackId: Long)

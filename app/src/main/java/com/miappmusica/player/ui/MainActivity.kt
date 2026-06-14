@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +33,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miappmusica.player.feature.modes.ModesViewModel
 import com.miappmusica.player.feature.modes.accentColor
+import com.miappmusica.player.feature.settings.SettingsViewModel
+import com.miappmusica.player.domain.model.DarkMode
 import com.miappmusica.player.ui.theme.MiAppMusicaTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -43,12 +46,25 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val modesViewModel: ModesViewModel = hiltViewModel()
+            val settingsViewModel: SettingsViewModel = hiltViewModel()
             val modesState by modesViewModel.state.collectAsStateWithLifecycle()
+            val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
+
             val accent: Color? = modesState.activeMode
                 .takeIf { !it.isNormal }
                 ?.accentColor()
 
-            MiAppMusicaTheme(modeAccent = accent) {
+            val darkTheme = when (settings.darkMode) {
+                DarkMode.SYSTEM -> isSystemInDarkTheme()
+                DarkMode.LIGHT -> false
+                DarkMode.DARK -> true
+            }
+
+            MiAppMusicaTheme(
+                darkTheme = darkTheme,
+                dynamicColor = settings.dynamicColor,
+                modeAccent = accent
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
