@@ -7,8 +7,9 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+# 'write' is required so the workflow can publish the APK as a GitHub Release asset.
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,7 +17,7 @@ concurrency:
 
 jobs:
   build:
-    name: Assemble debug & release APKs
+    name: Assemble & publish APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -50,18 +51,52 @@ jobs:
       - name: Build release APK
         run: ./gradlew :app:assembleRelease --stacktrace
 
-      - name: Upload debug APK
+      # Rename to friendly, predictable filenames for the Release page.
+      - name: Collect APKs
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk \
+             "dist/MI_APP_MUSICA-debug-b${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk \
+             "dist/MI_APP_MUSICA-release-b${{ github.run_number }}.apk"
+          ls -lh dist
+
+      # ---- Artefactos de Actions (respaldo) ----
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: MI_APP_MUSICA-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: dist/MI_APP_MUSICA-debug-*.apk
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload release APK
+      - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: MI_APP_MUSICA-release-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: dist/MI_APP_MUSICA-release-*.apk
           if-no-files-found: error
           retention-days: 30
+
+      # ---- Descarga directa: GitHub Release (solo en push/manual, no en PR) ----
+      # Mantiene una release fija con tag "latest" que se actualiza en cada build.
+      # Enlace directo siempre disponible en la pestaña "Releases" del repositorio.
+      - name: Publish APK to GitHub Release (latest)
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "MI APP MUSICA - ultima build (#${{ github.run_number }})"
+          body: |
+            APK generado automaticamente desde el commit ${{ github.sha }}.
+
+            - **MI_APP_MUSICA-debug-*.apk**: version de depuracion, instalable directamente.
+            - **MI_APP_MUSICA-release-*.apk**: version optimizada (R8), firmada con la debug key (instalable).
+
+            Descarga el archivo .apk de abajo, transfierelo al telefono e instalalo
+            (habilita "instalar apps de origen desconocido" si el sistema lo pide).
+          files: |
+            dist/MI_APP_MUSICA-debug-b${{ github.run_number }}.apk
+            dist/MI_APP_MUSICA-release-b${{ github.run_number }}.apk
+          make_latest: true
+          fail_on_unmatched_files: true
