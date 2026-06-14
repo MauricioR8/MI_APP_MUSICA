@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +41,7 @@ import com.miappmusica.player.domain.model.DarkMode
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
+    onOpenMetadata: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -127,6 +129,25 @@ fun SettingsScreen(
             checked = settings.autoArtworkOnline,
             onCheckedChange = viewModel::setAutoArtwork
         )
+        Row(
+            Modifier.fillMaxWidth().clickable(onClick = onOpenMetadata).padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.CleaningServices,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Herramienta de limpieza de metadatos", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Revisa y corrige títulos, artistas y carátulas de tu biblioteca",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        }
     }
 }
 

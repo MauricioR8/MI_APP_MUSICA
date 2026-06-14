@@ -1,5 +1,6 @@
 package com.miappmusica.player.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -8,9 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -18,8 +16,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,15 +26,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.miappmusica.player.feature.library.LibraryScreen
@@ -50,15 +42,14 @@ import com.miappmusica.player.feature.player.NowPlayingScreen
 import com.miappmusica.player.feature.player.PlayerViewModel
 import com.miappmusica.player.feature.playlists.PlaylistDetailScreen
 import com.miappmusica.player.feature.playlists.PlaylistsScreen
+import com.miappmusica.player.feature.search.SearchScreen
 import com.miappmusica.player.feature.settings.SettingsScreen
 
-private enum class Dest(val route: String, val label: String, val icon: ImageVector) {
-    LIBRARY("library", "Biblioteca", Icons.Filled.LibraryMusic),
-    PLAYLISTS("playlists", "Listas", Icons.Filled.QueueMusic),
-    DOWNLOADS("metadata", "Descargados", Icons.Filled.Download)
-}
-
+private const val ROUTE_PLAYLISTS = "playlists"
+private const val ROUTE_LIBRARY = "library"
+private const val ROUTE_METADATA = "metadata"
 private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_SEARCH = "search"
 const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
 fun playlistDetailRoute(id: Long) = "playlist/$id"
 
@@ -74,11 +65,11 @@ fun AppRoot(
     val currentTrack by playerViewModel.currentTrack.collectAsStateWithLifecycle()
     val lyrics by playerViewModel.lyrics.collectAsStateWithLifecycle()
     val lyricsDownloaded by playerViewModel.isLyricsDownloaded.collectAsStateWithLifecycle()
+    val isFavorite by playerViewModel.isCurrentFavorite.collectAsStateWithLifecycle()
+    val queue by playerViewModel.queue.collectAsStateWithLifecycle()
+    val playlists by playerViewModel.playlists.collectAsStateWithLifecycle()
 
     var showPlayer by remember { mutableStateOf(false) }
-
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.hierarchy?.firstOrNull()?.route
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
@@ -96,10 +87,10 @@ fun AppRoot(
                             IconButton(onClick = { playerViewModel.refreshLibrary() }) {
                                 Icon(Icons.Filled.Refresh, contentDescription = "Refrescar biblioteca")
                             }
-                            IconButton(onClick = { navController.navigateSingleTop(Dest.DOWNLOADS.route) }) {
-                                Icon(Icons.Filled.Search, contentDescription = "Herramienta de metadatos")
+                            IconButton(onClick = { navController.navigate(ROUTE_SEARCH) }) {
+                                Icon(Icons.Filled.Search, contentDescription = "Buscar canción")
                             }
-                            IconButton(onClick = { navController.navigateSingleTop(ROUTE_SETTINGS) }) {
+                            IconButton(onClick = { navController.navigate(ROUTE_SETTINGS) }) {
                                 Icon(Icons.Filled.Settings, contentDescription = "Ajustes")
                             }
                         }
@@ -107,38 +98,36 @@ fun AppRoot(
                 }
             },
             bottomBar = {
-                Column {
-                    MiniPlayer(
-                        state = nowPlaying,
-                        onTogglePlay = playerViewModel::togglePlayPause,
-                        onNext = playerViewModel::next,
-                        onPrevious = playerViewModel::previous,
-                        onExpand = { showPlayer = true }
-                    )
-                    NavigationBar {
-                        Dest.entries.forEach { dest ->
-                            NavigationBarItem(
-                                selected = currentRoute == dest.route,
-                                onClick = { navController.navigateSingleTop(dest.route) },
-                                icon = { Icon(dest.icon, contentDescription = dest.label) },
-                                label = { Text(dest.label) }
-                            )
-                        }
-                    }
-                }
+                MiniPlayer(
+                    state = nowPlaying,
+                    onTogglePlay = playerViewModel::togglePlayPause,
+                    onNext = playerViewModel::next,
+                    onPrevious = playerViewModel::previous,
+                    onExpand = { showPlayer = true }
+                )
             }
         ) { padding ->
             NavHost(
                 navController = navController,
-                startDestination = Dest.PLAYLISTS.route,
+                startDestination = ROUTE_PLAYLISTS,
                 modifier = Modifier.padding(padding)
             ) {
-                composable(Dest.LIBRARY.route) { LibraryScreen() }
-                composable(Dest.PLAYLISTS.route) {
-                    PlaylistsScreen(onOpenPlaylist = { id -> navController.navigate(playlistDetailRoute(id)) })
+                composable(ROUTE_PLAYLISTS) {
+                    PlaylistsScreen(
+                        onOpenPlaylist = { id -> navController.navigate(playlistDetailRoute(id)) },
+                        onOpenLibrary = { navController.navigate(ROUTE_LIBRARY) }
+                    )
                 }
-                composable(Dest.DOWNLOADS.route) { MetadataScreen() }
-                composable(ROUTE_SETTINGS) { SettingsScreen() }
+                composable(ROUTE_LIBRARY) {
+                    LibraryScreen(onBack = { navController.popBackStack() })
+                }
+                composable(ROUTE_SEARCH) {
+                    SearchScreen(onBack = { navController.popBackStack() })
+                }
+                composable(ROUTE_METADATA) { MetadataScreen() }
+                composable(ROUTE_SETTINGS) {
+                    SettingsScreen(onOpenMetadata = { navController.navigate(ROUTE_METADATA) })
+                }
                 composable(
                     route = ROUTE_PLAYLIST_DETAIL,
                     arguments = listOf(navArgument("playlistId") { type = NavType.LongType })
@@ -148,6 +137,9 @@ fun AppRoot(
                 }
             }
         }
+
+        // Closing the full player with the back gesture should not exit the app.
+        BackHandler(enabled = showPlayer) { showPlayer = false }
 
         // Full-screen Now Playing overlay
         AnimatedVisibility(
@@ -167,17 +159,16 @@ fun AppRoot(
                     lyrics = lyrics,
                     lyricsDownloaded = lyricsDownloaded,
                     onLoadLyrics = playerViewModel::loadLyrics,
-                    onDownloadLyrics = playerViewModel::downloadLyrics
+                    onDownloadLyrics = playerViewModel::downloadLyrics,
+                    isFavorite = isFavorite,
+                    onToggleFavorite = playerViewModel::toggleFavorite,
+                    queue = queue,
+                    onPlayQueueIndex = playerViewModel::playQueueIndex,
+                    playlists = playlists,
+                    onAddToPlaylist = playerViewModel::addCurrentToPlaylist,
+                    onCreatePlaylist = playerViewModel::createPlaylistWithCurrent
                 )
             }
         }
-    }
-}
-
-private fun androidx.navigation.NavController.navigateSingleTop(route: String) {
-    navigate(route) {
-        popUpTo(graph.findStartDestination().id) { saveState = true }
-        launchSingleTop = true
-        restoreState = true
     }
 }

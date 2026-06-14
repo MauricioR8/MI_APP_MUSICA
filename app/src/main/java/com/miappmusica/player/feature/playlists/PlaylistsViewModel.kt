@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miappmusica.player.domain.model.Playlist
 import com.miappmusica.player.domain.model.Track
+import com.miappmusica.player.data.repository.StatsRepository
 import com.miappmusica.player.domain.repository.LibraryRepository
 import com.miappmusica.player.domain.repository.PlaylistRepository
 import com.miappmusica.player.domain.repository.TransferRepository
@@ -21,6 +22,9 @@ import javax.inject.Inject
 data class PlaylistsUiState(
     val playlists: List<Playlist> = emptyList(),
     val recentlyAdded: List<Track> = emptyList(),
+    val mostPlayed: List<Track> = emptyList(),
+    val recentlyPlayed: List<Track> = emptyList(),
+    val favorites: List<Track> = emptyList(),
     val downloads: List<Track> = emptyList(),
     val totalTracks: Int = 0,
     /** playlistId -> cover image (manual cover, else first track artwork). */
@@ -32,20 +36,30 @@ class PlaylistsViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val transferRepository: TransferRepository,
     private val libraryRepository: LibraryRepository,
+    private val statsRepository: StatsRepository,
     private val playbackConnection: PlaybackConnection
 ) : ViewModel() {
 
     val state: StateFlow<PlaylistsUiState> = combine(
         playlistRepository.observePlaylists(),
-        libraryRepository.observeTracks()
-    ) { playlists, tracks ->
+        libraryRepository.observeTracks(),
+        statsRepository.observeFavoriteIds(),
+        statsRepository.observeMostPlayed(),
+        statsRepository.observeRecentlyPlayed()
+    ) { playlists, tracks, favoriteIds, mostPlayedIds, recentlyPlayedIds ->
         val artworkByTrack = tracks.associate { it.id to it.artworkUri }
+        val byId = tracks.associateBy { it.id }
         val covers = playlists.associate { p ->
             p.id to (p.coverUri ?: p.trackIds.firstNotNullOfOrNull { artworkByTrack[it] })
         }
+        // Map ordered id lists to Tracks, preserving order and skipping missing entries.
+        fun mapIds(ids: List<Long>): List<Track> = ids.mapNotNull { byId[it] }
         PlaylistsUiState(
             playlists = playlists,
             recentlyAdded = tracks.sortedByDescending { it.dateAdded }.take(50),
+            mostPlayed = mapIds(mostPlayedIds),
+            recentlyPlayed = mapIds(recentlyPlayedIds),
+            favorites = mapIds(favoriteIds),
             downloads = tracks.filter { it.isDownloaded },
             totalTracks = tracks.size,
             covers = covers

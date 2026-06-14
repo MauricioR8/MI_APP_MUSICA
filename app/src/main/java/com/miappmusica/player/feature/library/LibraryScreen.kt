@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -54,6 +55,7 @@ import coil.compose.AsyncImage
 @Composable
 fun LibraryScreen(
     modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -71,91 +73,106 @@ fun LibraryScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        when {
-            state.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-            state.tracks.isEmpty() -> Text(
-                text = "No se encontraron audios.\nConcede permisos o agrega musica al dispositivo.",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.align(Alignment.Center).padding(24.dp)
-            )
-            else -> {
-                Column(Modifier.fillMaxSize()) {
-                    // Selection mode header
-                    if (state.selectionMode) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { viewModel.exitSelectionMode() }) {
-                                Icon(Icons.Filled.Close, "Cancelar")
-                            }
-                            Text(
-                                "${state.selectedIds.size} seleccionadas",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(
-                                onClick = { viewModel.showCreatePlaylistDialog() },
-                                enabled = state.selectedIds.isNotEmpty()
-                            ) {
-                                Icon(Icons.Filled.PlaylistAdd, null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Crear lista")
-                            }
-                            TextButton(
-                                onClick = { viewModel.requestDeleteSelected() },
-                                enabled = state.selectedIds.isNotEmpty()
-                            ) {
-                                Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Eliminar")
-                            }
-                        }
+        Column(Modifier.fillMaxSize()) {
+            if (onBack != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás")
                     }
-
-                    LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-                        state.isolatedTitle?.let { title ->
-                            item {
-                                Text(
-                                    text = "Aislado en: $title",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                )
-                            }
-                        }
-                        itemsIndexed(state.tracks, key = { _, t -> t.id }) { index, track ->
+                    Text("Biblioteca", style = MaterialTheme.typography.titleLarge)
+                }
+            }
+            Box(Modifier.fillMaxSize().weight(1f)) {
+                when {
+                    state.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                    state.tracks.isEmpty() -> Text(
+                        text = "No se encontraron audios.\nConcede permisos o agrega musica al dispositivo.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.align(Alignment.Center).padding(24.dp)
+                    )
+                    else -> {
+                        Column(Modifier.fillMaxSize()) {
+                            // Selection mode header
                             if (state.selectionMode) {
-                                SelectableTrackRow(
-                                    track = track,
-                                    isSelected = state.selectedIds.contains(track.id),
-                                    onClick = { viewModel.toggleTrackSelection(track.id) }
-                                )
-                            } else {
-                                LongPressTrackRow(
-                                    track = track,
-                                    onClick = { viewModel.play(index) },
-                                    onLongClick = {
-                                        viewModel.enterSelectionMode()
-                                        viewModel.toggleTrackSelection(track.id)
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = { viewModel.exitSelectionMode() }) {
+                                        Icon(Icons.Filled.Close, "Cancelar")
                                     }
-                                )
+                                    Text(
+                                        "${state.selectedIds.size} seleccionadas",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(
+                                        onClick = { viewModel.showCreatePlaylistDialog() },
+                                        enabled = state.selectedIds.isNotEmpty()
+                                    ) {
+                                        Icon(Icons.Filled.PlaylistAdd, null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Crear lista")
+                                    }
+                                    TextButton(
+                                        onClick = { viewModel.requestDeleteSelected() },
+                                        enabled = state.selectedIds.isNotEmpty()
+                                    ) {
+                                        Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Eliminar")
+                                    }
+                                }
+                            }
+
+                            LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
+                                state.isolatedTitle?.let { title ->
+                                    item {
+                                        Text(
+                                            text = "Aislado en: $title",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
+                                    }
+                                }
+                                itemsIndexed(state.tracks, key = { _, t -> t.id }) { index, track ->
+                                    if (state.selectionMode) {
+                                        SelectableTrackRow(
+                                            track = track,
+                                            isSelected = state.selectedIds.contains(track.id),
+                                            onClick = { viewModel.toggleTrackSelection(track.id) }
+                                        )
+                                    } else {
+                                        LongPressTrackRow(
+                                            track = track,
+                                            onClick = { viewModel.play(index) },
+                                            onLongClick = {
+                                                viewModel.enterSelectionMode()
+                                                viewModel.toggleTrackSelection(track.id)
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
-        }
 
-        // FAB to create a new playlist (visible when NOT in selection mode)
-        if (!state.isLoading && state.tracks.isNotEmpty() && !state.selectionMode) {
-            FloatingActionButton(
-                onClick = { viewModel.showCreatePlaylistDialog() },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "Crear lista de reproduccion")
+                // FAB to create a new playlist (visible when NOT in selection mode)
+                if (!state.isLoading && state.tracks.isNotEmpty() && !state.selectionMode) {
+                    FloatingActionButton(
+                        onClick = { viewModel.showCreatePlaylistDialog() },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp),
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = "Crear lista de reproduccion")
+                    }
+                }
             }
         }
     }

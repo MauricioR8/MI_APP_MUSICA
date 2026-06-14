@@ -55,6 +55,9 @@ class PlaybackConnection @Inject constructor(
     private val _nowPlaying = MutableStateFlow(NowPlayingState())
     val nowPlaying: StateFlow<NowPlayingState> = _nowPlaying.asStateFlow()
 
+    private val _queue = MutableStateFlow<List<QueueEntry>>(emptyList())
+    val queue: StateFlow<List<QueueEntry>> = _queue.asStateFlow()
+
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             updateNowPlaying()
@@ -111,6 +114,12 @@ class PlaybackConnection @Inject constructor(
         updateNowPlaying()
     }
 
+    /** Jumps to the given queue index and starts playback. */
+    fun playQueueIndex(index: Int) {
+        controller?.seekToDefaultPosition(index)
+        controller?.play()
+    }
+
     private fun startTicker() {
         tickerJob?.cancel()
         tickerJob = scope.launch {
@@ -125,6 +134,7 @@ class PlaybackConnection @Inject constructor(
         val c = controller
         if (c == null || c.mediaItemCount == 0) {
             _nowPlaying.value = NowPlayingState()
+            _queue.value = emptyList()
             return
         }
         val meta = c.mediaMetadata
@@ -140,7 +150,32 @@ class PlaybackConnection @Inject constructor(
             hasNext = c.hasNextMediaItem(),
             hasPrevious = c.hasPreviousMediaItem()
         )
+
+        // Rebuild the queue snapshot for the player's "cola" overlay.
+        val list = ArrayList<QueueEntry>()
+        val count = c.mediaItemCount
+        val curIndex = c.currentMediaItemIndex
+        for (i in 0 until count) {
+            val mi = c.getMediaItemAt(i)
+            list.add(
+                QueueEntry(
+                    mediaId = mi.mediaId,
+                    title = mi.mediaMetadata.title?.toString().orEmpty(),
+                    artist = mi.mediaMetadata.artist?.toString().orEmpty(),
+                    isCurrent = i == curIndex
+                )
+            )
+        }
+        _queue.value = list
     }
+
+    /** A single item in the playback queue, surfaced to the "cola" overlay in the player. */
+    data class QueueEntry(
+        val mediaId: String,
+        val title: String,
+        val artist: String,
+        val isCurrent: Boolean
+    )
 
     private fun Track.toMediaItem(): MediaItem = MediaItem.Builder()
         .setMediaId(id.toString())

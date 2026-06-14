@@ -5,25 +5,29 @@ import androidx.room.RoomDatabase
 import com.miappmusica.player.data.local.dao.LyricsDao
 import com.miappmusica.player.data.local.dao.ModeDao
 import com.miappmusica.player.data.local.dao.PlaylistDao
+import com.miappmusica.player.data.local.dao.TrackStatsDao
 import com.miappmusica.player.data.local.entity.LyricsEntity
 import com.miappmusica.player.data.local.entity.ModeEntity
 import com.miappmusica.player.data.local.entity.PlaylistEntity
 import com.miappmusica.player.data.local.entity.PlaylistTrackCrossRef
+import com.miappmusica.player.data.local.entity.TrackStatsEntity
 
 @Database(
     entities = [
         PlaylistEntity::class,
         PlaylistTrackCrossRef::class,
         ModeEntity::class,
-        LyricsEntity::class
+        LyricsEntity::class,
+        TrackStatsEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
     abstract fun modeDao(): ModeDao
     abstract fun lyricsDao(): LyricsDao
+    abstract fun trackStatsDao(): TrackStatsDao
 
     companion object {
         const val NAME = "mi_app_musica.db"

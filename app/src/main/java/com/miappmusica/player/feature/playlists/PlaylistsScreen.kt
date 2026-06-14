@@ -65,6 +65,7 @@ import kotlinx.coroutines.launch
 fun PlaylistsScreen(
     modifier: Modifier = Modifier,
     onOpenPlaylist: (Long) -> Unit = {},
+    onOpenLibrary: () -> Unit = {},
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -116,10 +117,34 @@ fun PlaylistsScreen(
                         }
                         item {
                             SmartCard(
-                                title = "Descargados",
-                                count = state.downloads.size,
-                                cover = state.downloads.firstOrNull()?.artworkUri,
-                                onClick = { viewModel.playTracks(state.downloads) }
+                                title = "Más escuchadas",
+                                count = state.mostPlayed.size,
+                                cover = state.mostPlayed.firstOrNull()?.artworkUri,
+                                onClick = { viewModel.playTracks(state.mostPlayed) }
+                            )
+                        }
+                        item {
+                            SmartCard(
+                                title = "Últimas escuchadas",
+                                count = state.recentlyPlayed.size,
+                                cover = state.recentlyPlayed.firstOrNull()?.artworkUri,
+                                onClick = { viewModel.playTracks(state.recentlyPlayed) }
+                            )
+                        }
+                        item {
+                            SmartCard(
+                                title = "Pistas favoritas",
+                                count = state.favorites.size,
+                                cover = state.favorites.firstOrNull()?.artworkUri,
+                                onClick = { viewModel.playTracks(state.favorites) }
+                            )
+                        }
+                        item {
+                            SmartCard(
+                                title = "Biblioteca",
+                                count = state.totalTracks,
+                                cover = null,
+                                onClick = onOpenLibrary
                             )
                         }
                     }

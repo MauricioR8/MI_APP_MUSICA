@@ -1,5 +1,6 @@
 package com.miappmusica.player.feature.player
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,34 +11,48 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,8 +67,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.miappmusica.player.data.repository.LyricsResult
+import com.miappmusica.player.domain.model.Playlist
 import com.miappmusica.player.domain.model.Track
 import com.miappmusica.player.playback.NowPlayingState
+import com.miappmusica.player.playback.PlaybackConnection
 import java.util.Locale
 
 fun formatTime(ms: Long): String {
@@ -143,12 +160,21 @@ fun NowPlayingScreen(
     lyrics: LyricsResult = LyricsResult.Loading,
     lyricsDownloaded: Boolean = false,
     onLoadLyrics: () -> Unit = {},
-    onDownloadLyrics: () -> Unit = {}
+    onDownloadLyrics: () -> Unit = {},
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
+    queue: List<PlaybackConnection.QueueEntry> = emptyList(),
+    onPlayQueueIndex: (Int) -> Unit = {},
+    playlists: List<Playlist> = emptyList(),
+    onAddToPlaylist: (Long) -> Unit = {},
+    onCreatePlaylist: (String) -> Unit = {}
 ) {
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
     var showInfo by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
+    var showAddToPlaylist by remember { mutableStateOf(false) }
 
     val duration = state.durationMs.coerceAtLeast(1L)
     val sliderValue = if (dragging) dragValue else state.positionMs.toFloat().coerceIn(0f, duration.toFloat())
@@ -234,6 +260,29 @@ fun NowPlayingScreen(
 
             Spacer(Modifier.weight(1f))
 
+            // Secondary actions row: queue (left) + favorite heart (center) + add-to-playlist (right)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { showQueue = true }) {
+                    Icon(Icons.Filled.QueueMusic, "Cola de reproducción")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                            if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Quitar de favoritas" else "Añadir a favoritas",
+                            tint = if (isFavorite) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    IconButton(onClick = { showAddToPlaylist = true }) {
+                        Icon(Icons.Filled.PlaylistAdd, "Añadir a una lista")
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                 horizontalArrangement = Arrangement.Center,
@@ -269,8 +318,21 @@ fun NowPlayingScreen(
             LyricsOverlay(
                 lyrics = lyrics,
                 downloaded = lyricsDownloaded,
+                state = state,
                 onDownload = onDownloadLyrics,
                 onClose = { showLyrics = false }
+            )
+        }
+
+        // Queue overlay: shows what's playing now and what comes next.
+        if (showQueue) {
+            QueueOverlay(
+                queue = queue,
+                onPlayIndex = { index ->
+                    onPlayQueueIndex(index)
+                    showQueue = false
+                },
+                onClose = { showQueue = false }
             )
         }
     }
@@ -280,15 +342,32 @@ fun NowPlayingScreen(
             TrackInfoDialog(track = track, onDismiss = { showInfo = false })
         }
     }
+
+    if (showAddToPlaylist) {
+        AddToPlaylistDialog(
+            playlists = playlists,
+            onSelect = { id ->
+                onAddToPlaylist(id)
+                showAddToPlaylist = false
+            },
+            onCreate = { name ->
+                onCreatePlaylist(name)
+                showAddToPlaylist = false
+            },
+            onDismiss = { showAddToPlaylist = false }
+        )
+    }
 }
 
 @Composable
 private fun LyricsOverlay(
     lyrics: LyricsResult,
     downloaded: Boolean,
+    state: NowPlayingState,
     onDownload: () -> Unit,
     onClose: () -> Unit
 ) {
+    BackHandler(enabled = true) { onClose() }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -324,12 +403,7 @@ private fun LyricsOverlay(
                         Modifier.align(Alignment.Center),
                         color = Color.White
                     )
-                    is LyricsResult.Available -> Text(
-                        text = lyrics.text,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White,
-                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                    )
+                    is LyricsResult.Available -> SyncedLyrics(text = lyrics.text, state = state)
                     LyricsResult.NotFound -> Text(
                         "No se encontraron letras",
                         style = MaterialTheme.typography.bodyLarge,
@@ -363,4 +437,188 @@ private fun LyricsOverlay(
             }
         }
     }
+}
+
+/**
+ * Spotify-style lyrics: highlights the approximate current line based on playback progress and
+ * auto-scrolls to keep it in view. This is an approximation (no real LRC timing).
+ */
+@Composable
+private fun SyncedLyrics(text: String, state: NowPlayingState) {
+    val lines = remember(text) { text.split("\n") }
+    val progress = if (state.durationMs > 0) state.positionMs.toFloat() / state.durationMs else 0f
+    val activeLine = (progress * lines.size).toInt().coerceIn(0, (lines.size - 1).coerceAtLeast(0))
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(activeLine) {
+        listState.animateScrollToItem(activeLine.coerceAtLeast(0))
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        itemsIndexed(lines) { index, line ->
+            if (line.isBlank()) {
+                Spacer(Modifier.size(10.dp))
+            } else {
+                val isActive = index == activeLine
+                Text(
+                    text = line,
+                    style = if (isActive) MaterialTheme.typography.titleMedium
+                    else MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isActive) MaterialTheme.colorScheme.primary
+                    else Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueOverlay(
+    queue: List<PlaybackConnection.QueueEntry>,
+    onPlayIndex: (Int) -> Unit,
+    onClose: () -> Unit
+) {
+    BackHandler(enabled = true) { onClose() }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.78f))
+            .clickable(onClick = onClose)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "En reproducción / A continuación",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, "Cerrar", tint = Color.White)
+                }
+            }
+
+            if (queue.isEmpty()) {
+                Text(
+                    "La cola está vacía",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
+                    itemsIndexed(queue) { index, entry ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPlayIndex(index) }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    entry.title.ifBlank { "Pista" },
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (entry.isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (entry.isCurrent) MaterialTheme.colorScheme.primary else Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    if (entry.isCurrent) "Reproduciendo" else entry.artist,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (entry.isCurrent) MaterialTheme.colorScheme.primary
+                                    else Color.White.copy(alpha = 0.6f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (entry.isCurrent) {
+                                Icon(
+                                    Icons.Filled.MusicNote,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddToPlaylistDialog(
+    playlists: List<Playlist>,
+    onSelect: (Long) -> Unit,
+    onCreate: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var newName by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Añadir a una lista") },
+        text = {
+            Column {
+                if (playlists.isEmpty()) {
+                    Text(
+                        "No tienes listas todavía. Crea una nueva abajo.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
+                        items(playlists, key = { it.id }) { playlist ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelect(playlist.id) }
+                                    .padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.QueueMusic, null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    playlist.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.size(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Nueva lista") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { if (newName.isNotBlank()) onCreate(newName) },
+                        enabled = newName.isNotBlank()
+                    ) {
+                        Icon(Icons.Filled.Add, "Crear lista")
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+    )
 }

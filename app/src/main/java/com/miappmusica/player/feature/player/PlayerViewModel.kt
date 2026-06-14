@@ -4,8 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miappmusica.player.data.repository.LyricsRepository
 import com.miappmusica.player.data.repository.LyricsResult
+import com.miappmusica.player.data.repository.StatsRepository
+import com.miappmusica.player.domain.model.Playlist
 import com.miappmusica.player.domain.model.Track
 import com.miappmusica.player.domain.repository.LibraryRepository
+import com.miappmusica.player.domain.repository.PlaylistRepository
 import com.miappmusica.player.playback.NowPlayingState
 import com.miappmusica.player.playback.PlaybackConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,9 +18,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -30,10 +36,15 @@ import javax.inject.Inject
 class PlayerViewModel @Inject constructor(
     private val playbackConnection: PlaybackConnection,
     private val libraryRepository: LibraryRepository,
-    private val lyricsRepository: LyricsRepository
+    private val lyricsRepository: LyricsRepository,
+    private val statsRepository: StatsRepository,
+    private val playlistRepository: PlaylistRepository
 ) : ViewModel() {
 
     val nowPlaying: StateFlow<NowPlayingState> = playbackConnection.nowPlaying
+
+    /** Live playback queue ("cola") for the player overlay. */
+    val queue: StateFlow<List<PlaybackConnection.QueueEntry>> = playbackConnection.queue
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
@@ -53,14 +64,54 @@ class PlayerViewModel @Inject constructor(
         if (t == null) flowOf(false) else lyricsRepository.observeDownloaded(t.id)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** Whether the currently playing track is marked as favorite. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val isCurrentFavorite: StateFlow<Boolean> = currentTrack.flatMapLatest { t ->
+        if (t == null) flowOf(false) else statsRepository.observeFavorite(t.id)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** All user playlists, for the "add to playlist" dialog. */
+    val playlists: StateFlow<List<Playlist>> = playlistRepository.observePlaylists()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     init {
         playbackConnection.connect()
+        // Record a play each time the current media item changes.
+        nowPlaying
+            .map { it.mediaId }
+            .filter { it.isNotBlank() }
+            .distinctUntilChanged()
+            .onEach { mediaId -> mediaId.toLongOrNull()?.let { statsRepository.recordPlay(it) } }
+            .launchIn(viewModelScope)
     }
 
     fun togglePlayPause() = playbackConnection.togglePlayPause()
     fun next() = playbackConnection.next()
     fun previous() = playbackConnection.previous()
     fun seekTo(positionMs: Long) = playbackConnection.seekTo(positionMs)
+    fun playQueueIndex(i: Int) = playbackConnection.playQueueIndex(i)
+
+    /** Toggles the favorite flag for the currently playing track. */
+    fun toggleFavorite() {
+        val t = currentTrack.value ?: return
+        viewModelScope.launch { statsRepository.toggleFavorite(t.id, !isCurrentFavorite.value) }
+    }
+
+    /** Adds the currently playing track to an existing playlist/album. */
+    fun addCurrentToPlaylist(playlistId: Long) {
+        val t = currentTrack.value ?: return
+        viewModelScope.launch { playlistRepository.addTrack(playlistId, t.id) }
+    }
+
+    /** Creates a new playlist seeded with the currently playing track. */
+    fun createPlaylistWithCurrent(name: String) {
+        val t = currentTrack.value ?: return
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            val id = playlistRepository.create(name)
+            playlistRepository.addTrack(id, t.id)
+        }
+    }
 
     /** Loads lyrics for the current track (cache first, then online unless offline-only). */
     fun loadLyrics() {
