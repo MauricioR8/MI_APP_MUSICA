@@ -36,6 +36,7 @@ import androidx.navigation.navArgument
 import com.miappmusica.player.feature.library.LibraryScreen
 import com.miappmusica.player.feature.metadata.MetadataScreen
 import com.miappmusica.player.feature.modes.ModeBar
+import com.miappmusica.player.feature.modes.ModesManagerScreen
 import com.miappmusica.player.feature.modes.ModesViewModel
 import com.miappmusica.player.feature.player.MiniPlayer
 import com.miappmusica.player.feature.player.NowPlayingScreen
@@ -44,14 +45,18 @@ import com.miappmusica.player.feature.playlists.PlaylistDetailScreen
 import com.miappmusica.player.feature.playlists.PlaylistsScreen
 import com.miappmusica.player.feature.search.SearchScreen
 import com.miappmusica.player.feature.settings.SettingsScreen
+import com.miappmusica.player.feature.tracklist.TrackListScreen
 
 private const val ROUTE_PLAYLISTS = "playlists"
 private const val ROUTE_LIBRARY = "library"
 private const val ROUTE_METADATA = "metadata"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SEARCH = "search"
+private const val ROUTE_MODES = "modes"
 const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
 fun playlistDetailRoute(id: Long) = "playlist/$id"
+const val ROUTE_TRACK_LIST = "tracklist/{type}"
+fun trackListRoute(type: String) = "tracklist/$type"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,7 +120,8 @@ fun AppRoot(
                 composable(ROUTE_PLAYLISTS) {
                     PlaylistsScreen(
                         onOpenPlaylist = { id -> navController.navigate(playlistDetailRoute(id)) },
-                        onOpenLibrary = { navController.navigate(ROUTE_LIBRARY) }
+                        onOpenLibrary = { navController.navigate(ROUTE_LIBRARY) },
+                        onOpenTrackList = { type -> navController.navigate(trackListRoute(type)) }
                     )
                 }
                 composable(ROUTE_LIBRARY) {
@@ -126,7 +132,20 @@ fun AppRoot(
                 }
                 composable(ROUTE_METADATA) { MetadataScreen() }
                 composable(ROUTE_SETTINGS) {
-                    SettingsScreen(onOpenMetadata = { navController.navigate(ROUTE_METADATA) })
+                    SettingsScreen(
+                        onOpenMetadata = { navController.navigate(ROUTE_METADATA) },
+                        onOpenModes = { navController.navigate(ROUTE_MODES) }
+                    )
+                }
+                composable(ROUTE_MODES) {
+                    ModesManagerScreen(onBack = { navController.popBackStack() })
+                }
+                composable(
+                    route = ROUTE_TRACK_LIST,
+                    arguments = listOf(navArgument("type") { type = NavType.StringType })
+                ) { entry ->
+                    val type = entry.arguments?.getString("type") ?: "recently_added"
+                    TrackListScreen(type = type, onBack = { navController.popBackStack() })
                 }
                 composable(
                     route = ROUTE_PLAYLIST_DETAIL,

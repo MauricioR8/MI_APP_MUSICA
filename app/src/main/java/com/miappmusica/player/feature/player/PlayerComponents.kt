@@ -445,13 +445,32 @@ private fun LyricsOverlay(
  */
 @Composable
 private fun SyncedLyrics(text: String, state: NowPlayingState) {
+    // Guard against empty/blank lyrics so we never render an empty (confusing) overlay or crash.
     val lines = remember(text) { text.split("\n") }
-    val progress = if (state.durationMs > 0) state.positionMs.toFloat() / state.durationMs else 0f
-    val activeLine = (progress * lines.size).toInt().coerceIn(0, (lines.size - 1).coerceAtLeast(0))
+    val hasContent = remember(lines) { lines.any { it.isNotBlank() } }
+
+    if (text.isBlank() || lines.isEmpty() || !hasContent) {
+        Text(
+            "No se encontraron letras",
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White
+        )
+        return
+    }
+
+    val activeLine = if (state.durationMs > 0 && lines.isNotEmpty()) {
+        ((state.positionMs.toFloat() / state.durationMs) * lines.size)
+            .toInt()
+            .coerceIn(0, lines.lastIndex)
+    } else {
+        0
+    }
 
     val listState = rememberLazyListState()
     LaunchedEffect(activeLine) {
-        listState.animateScrollToItem(activeLine.coerceAtLeast(0))
+        if (lines.isNotEmpty()) {
+            runCatching { listState.animateScrollToItem(activeLine.coerceIn(0, lines.lastIndex)) }
+        }
     }
 
     LazyColumn(
@@ -460,6 +479,7 @@ private fun SyncedLyrics(text: String, state: NowPlayingState) {
     ) {
         itemsIndexed(lines) { index, line ->
             if (line.isBlank()) {
+                // Keep blank lines as a thin spacer so index<->position mapping stays correct.
                 Spacer(Modifier.size(10.dp))
             } else {
                 val isActive = index == activeLine

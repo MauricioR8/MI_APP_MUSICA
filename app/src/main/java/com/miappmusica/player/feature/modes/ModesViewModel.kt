@@ -3,6 +3,7 @@ package com.miappmusica.player.feature.modes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miappmusica.player.domain.model.AppMode
+import com.miappmusica.player.domain.model.Playlist
 import com.miappmusica.player.domain.repository.LibraryRepository
 import com.miappmusica.player.domain.repository.ModeRepository
 import com.miappmusica.player.domain.repository.PlaylistRepository
@@ -37,6 +38,10 @@ class ModesViewModel @Inject constructor(
     ) { modes, active ->
         ModesUiState(modes = modes, activeMode = active)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ModesUiState())
+
+    /** User playlists, used by the mode editor to pick an isolated playlist. */
+    val playlists: StateFlow<List<Playlist>> = playlistRepository.observePlaylists()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * Activates [modeId]. Side effects: persists the active mode (which drives UI theming and

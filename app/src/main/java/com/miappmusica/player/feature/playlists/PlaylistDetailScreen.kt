@@ -24,12 +24,14 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.RemoveCircle
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -176,6 +178,18 @@ private fun AddTracksDialog(
     onDismiss: () -> Unit
 ) {
     var selected by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var queryText by remember { mutableStateOf("") }
+    val filtered = remember(queryText, available) {
+        if (queryText.isBlank()) {
+            available
+        } else {
+            available.filter {
+                it.title.contains(queryText, ignoreCase = true) ||
+                    it.displayArtist.contains(queryText, ignoreCase = true) ||
+                    it.displayAlbum.contains(queryText, ignoreCase = true)
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -184,39 +198,50 @@ private fun AddTracksDialog(
             if (available.isEmpty()) {
                 Text("No hay más canciones disponibles para agregar.")
             } else {
-                LazyColumn(Modifier.heightIn(max = 400.dp)) {
-                    items(available, key = { it.id }) { track ->
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .clickable {
-                                    selected = if (selected.contains(track.id)) {
-                                        selected - track.id
-                                    } else {
-                                        selected + track.id
+                Column {
+                    OutlinedTextField(
+                        value = queryText,
+                        onValueChange = { queryText = it },
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        placeholder = { Text("Buscar canción…") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                        items(filtered, key = { it.id }) { track ->
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .clickable {
+                                        selected = if (selected.contains(track.id)) {
+                                            selected - track.id
+                                        } else {
+                                            selected + track.id
+                                        }
                                     }
-                                }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = selected.contains(track.id),
-                                onCheckedChange = { checked ->
-                                    selected = if (checked) selected + track.id else selected - track.id
-                                }
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    track.title,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyLarge
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = selected.contains(track.id),
+                                    onCheckedChange = { checked ->
+                                        selected = if (checked) selected + track.id else selected - track.id
+                                    }
                                 )
-                                Text(
-                                    track.displayArtist,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        track.title,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        track.displayArtist,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
                             }
                         }
                     }

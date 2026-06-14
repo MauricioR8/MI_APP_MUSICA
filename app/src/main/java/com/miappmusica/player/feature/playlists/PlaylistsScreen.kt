@@ -24,12 +24,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -66,6 +64,7 @@ fun PlaylistsScreen(
     modifier: Modifier = Modifier,
     onOpenPlaylist: (Long) -> Unit = {},
     onOpenLibrary: () -> Unit = {},
+    onOpenTrackList: (String) -> Unit = {},
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -111,32 +110,32 @@ fun PlaylistsScreen(
                             SmartCard(
                                 title = "Recién añadidas",
                                 count = state.recentlyAdded.size,
-                                cover = state.recentlyAdded.firstOrNull()?.artworkUri,
-                                onClick = { viewModel.playTracks(state.recentlyAdded) }
+                                cover = lastCover(state.recentlyAdded),
+                                onClick = { onOpenTrackList("recently_added") }
                             )
                         }
                         item {
                             SmartCard(
                                 title = "Más escuchadas",
                                 count = state.mostPlayed.size,
-                                cover = state.mostPlayed.firstOrNull()?.artworkUri,
-                                onClick = { viewModel.playTracks(state.mostPlayed) }
+                                cover = lastCover(state.mostPlayed),
+                                onClick = { onOpenTrackList("most_played") }
                             )
                         }
                         item {
                             SmartCard(
                                 title = "Últimas escuchadas",
                                 count = state.recentlyPlayed.size,
-                                cover = state.recentlyPlayed.firstOrNull()?.artworkUri,
-                                onClick = { viewModel.playTracks(state.recentlyPlayed) }
+                                cover = lastCover(state.recentlyPlayed),
+                                onClick = { onOpenTrackList("recently_played") }
                             )
                         }
                         item {
                             SmartCard(
                                 title = "Pistas favoritas",
                                 count = state.favorites.size,
-                                cover = state.favorites.firstOrNull()?.artworkUri,
-                                onClick = { viewModel.playTracks(state.favorites) }
+                                cover = lastCover(state.favorites),
+                                onClick = { onOpenTrackList("favorites") }
                             )
                         }
                         item {
@@ -148,14 +147,6 @@ fun PlaylistsScreen(
                             )
                         }
                     }
-                }
-
-                // Import / Export row
-                item {
-                    ImportExportRow(
-                        onImport = viewModel::import,
-                        onExport = viewModel::export
-                    )
                 }
 
                 items(sorted, key = { it.id }) { playlist ->
@@ -181,7 +172,7 @@ fun PlaylistsScreen(
         AlphabetIndex(
             modifier = Modifier.align(Alignment.CenterEnd),
             onLetter = { letter ->
-                val headerOffset = 2 // smart cards + import/export items
+                val headerOffset = 1 // only the smart cards rail precedes the playlist items
                 val idx = sorted.indexOfFirst { it.name.uppercase().startsWith(letter) }
                 if (idx >= 0) scope.launch { listState.animateScrollToItem(idx + headerOffset) }
             }
@@ -226,27 +217,9 @@ private fun SmartCard(title: String, count: Int, cover: String?, onClick: () -> 
     }
 }
 
-@Composable
-private fun ImportExportRow(onImport: (String) -> Unit, onExport: (String) -> Unit) {
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let { onImport(it.toString()) } }
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri -> uri?.let { onExport(it.toString()) } }
-
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        TextButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) {
-            Icon(Icons.Filled.Download, null); Spacer(Modifier.width(4.dp)); Text("Importar")
-        }
-        TextButton(onClick = { exportLauncher.launch(null) }) {
-            Icon(Icons.Filled.Upload, null); Spacer(Modifier.width(4.dp)); Text("Exportar")
-        }
-    }
-}
+/** Cover for a smart-card: the artwork of the LAST song in that card (newest/bottom entry). */
+private fun lastCover(tracks: List<com.miappmusica.player.domain.model.Track>): String? =
+    tracks.lastOrNull { it.artworkUri != null }?.artworkUri ?: tracks.lastOrNull()?.artworkUri
 
 @Composable
 private fun PlaylistRow(
