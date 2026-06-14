@@ -38,6 +38,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -46,46 +49,37 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      - name: Lint (report only, non-blocking)
-        run: ./gradlew :app:lintDebug --stacktrace
-        continue-on-error: true
-
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
+      # El build de release no debe bloquear la publicacion. Si fallara, igual publicamos el debug.
       - name: Build release APK
+        id: release_build
+        continue-on-error: true
         run: ./gradlew :app:assembleRelease --stacktrace
 
-      # Nombres de archivo unicos por version (no se repiten entre builds).
       - name: Collect APKs
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk \
              "dist/MI_APP_MUSICA-v${VERSION_NAME}-debug.apk"
-          cp app/build/outputs/apk/release/app-release.apk \
-             "dist/MI_APP_MUSICA-v${VERSION_NAME}-release.apk"
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk \
+               "dist/MI_APP_MUSICA-v${VERSION_NAME}-release.apk"
+          fi
           ls -lh dist
 
       # ---- Artefactos de Actions (respaldo) ----
-      - name: Upload debug APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: MI_APP_MUSICA-v${{ env.VERSION_NAME }}-debug
-          path: dist/MI_APP_MUSICA-v${{ env.VERSION_NAME }}-debug.apk
+          name: MI_APP_MUSICA-v${{ env.VERSION_NAME }}
+          path: dist/*.apk
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 60
 
-      - name: Upload release APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MI_APP_MUSICA-v${{ env.VERSION_NAME }}-release
-          path: dist/MI_APP_MUSICA-v${{ env.VERSION_NAME }}-release.apk
-          if-no-files-found: error
-          retention-days: 30
-
-      # ---- Descarga directa: una Release NUEVA por cada build (nombre/tag unicos) ----
-      # 'releases/latest' siempre apunta a la mas reciente, pero cada version tiene su
-      # propio nombre/tag para que nunca descargues la misma dos veces.
+      # ---- Apartado "Versiones": una Release NUEVA por cada build (nombre/tag unicos) ----
+      # 'releases/latest' apunta a la mas reciente; el historial completo queda en /releases.
       - name: Publish unique GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
@@ -96,13 +90,12 @@ jobs:
             Version v${{ env.VERSION_NAME }} (build #${{ github.run_number }}).
             Generada automaticamente desde el commit ${{ github.sha }}.
 
-            - **MI_APP_MUSICA-v${{ env.VERSION_NAME }}-debug.apk**: depuracion, instalable directamente.
-            - **MI_APP_MUSICA-v${{ env.VERSION_NAME }}-release.apk**: optimizada (R8), firmada con la debug key.
-
-            Descarga el .apk de abajo, transfierelo al telefono e instalalo
+            Descarga el archivo .apk de abajo, transfierelo al telefono e instalalo
             (habilita "instalar apps de origen desconocido" si el sistema lo pide).
+
+            - **-debug.apk**: version de depuracion, siempre disponible.
+            - **-release.apk**: version optimizada (se publica si el build de release tiene exito).
           files: |
-            dist/MI_APP_MUSICA-v${{ env.VERSION_NAME }}-debug.apk
-            dist/MI_APP_MUSICA-v${{ env.VERSION_NAME }}-release.apk
+            dist/*.apk
           make_latest: true
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false

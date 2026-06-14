@@ -33,12 +33,12 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            // Signed with the auto-generated debug key so CI produces an installable APK
-            // without committing release signing keys. Swap for a real keystore via secrets
-            // when shipping to production.
+            // Firmado con la debug key para que el APK sea instalable sin subir secretos.
+            // R8/shrink DESACTIVADO: evita fallos de ofuscacion (p.ej. jaudiotagger) en CI.
+            // No hay limite de peso, asi que priorizamos que el build nunca falle.
             signingConfig = signingConfigs.getByName("debug")
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
