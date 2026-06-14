@@ -29,7 +29,8 @@ data class MetadataUiState(
     val context: ContextDetection? = null,
     val diffs: List<MetadataDiff> = emptyList(),
     val isProcessing: Boolean = false,
-    val resultMessage: String? = null
+    val resultMessage: String? = null,
+    val pendingWriteRequest: androidx.activity.result.IntentSenderRequest? = null
 ) {
     val selectedCount: Int get() = selectedIds.size
     val acceptedChanges: Int get() = diffs.count { it.accepted && it.hasChanges }
@@ -152,21 +153,56 @@ class MetadataViewModel @Inject constructor(
 
     /** Applies every accepted diff to the underlying files (batch operation). */
     fun applyAll() {
+        val accepted = _state.value.diffs.filter { it.accepted }
+        if (accepted.isEmpty()) return
+        val sender = metadataRepository.buildWriteRequest(accepted)
+        if (sender != null) {
+            _state.value = _state.value.copy(
+                pendingWriteRequest = androidx.activity.result.IntentSenderRequest.Builder(sender).build()
+            )
+        } else {
+            performWrites() // API < 30 path
+        }
+    }
+
+    fun consumeWriteRequest() {
+        _state.value = _state.value.copy(pendingWriteRequest = null)
+    }
+
+    fun onWritePermissionResult(granted: Boolean) {
+        if (granted) {
+            performWrites()
+        } else {
+            _state.value = _state.value.copy(
+                phase = MetadataPhase.DONE,
+                resultMessage = "Permiso de escritura denegado. No se aplicaron cambios."
+            )
+        }
+    }
+
+    private fun performWrites() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isProcessing = true)
             var ok = 0
-            var failed = 0
+            val failures = mutableListOf<String>()
             _state.value.diffs.filter { it.accepted }.forEach { diff ->
                 metadataRepository.apply(diff).fold(
                     onSuccess = { ok++ },
-                    onFailure = { failed++ }
+                    onFailure = { e -> failures.add("• ${diff.proposed.title}: ${e.message ?: "error desconocido"}") }
                 )
             }
             libraryRepository.refresh()
+            val msg = buildString {
+                append("Aplicados $ok")
+                if (failures.isNotEmpty()) {
+                    append(" • Fallidos ${failures.size}\n\nDetalle del fallo:\n")
+                    append(failures.take(8).joinToString("\n"))
+                }
+            }
             _state.value = _state.value.copy(
                 isProcessing = false,
                 phase = MetadataPhase.DONE,
-                resultMessage = "Aplicados $ok • Fallidos $failed"
+                resultMessage = msg
             )
         }
     }

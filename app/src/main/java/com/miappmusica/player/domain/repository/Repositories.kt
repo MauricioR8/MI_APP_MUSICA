@@ -48,6 +48,9 @@ interface MetadataRepository {
 
     /** Persists accepted changes to the underlying audio file (and refreshes MediaStore). */
     suspend fun apply(diff: MetadataDiff): Result<Unit>
+
+    /** Builds a MediaStore write-permission request (API 30+) for the accepted diffs, or null if not needed. */
+    fun buildWriteRequest(diffs: List<MetadataDiff>): android.content.IntentSender?
 }
 
 interface TransferRepository {

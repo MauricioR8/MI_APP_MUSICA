@@ -35,10 +35,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.miappmusica.player.feature.library.LibraryScreen
 import com.miappmusica.player.feature.metadata.MetadataScreen
 import com.miappmusica.player.feature.modes.ModeBar
@@ -46,6 +48,7 @@ import com.miappmusica.player.feature.modes.ModesViewModel
 import com.miappmusica.player.feature.player.MiniPlayer
 import com.miappmusica.player.feature.player.NowPlayingScreen
 import com.miappmusica.player.feature.player.PlayerViewModel
+import com.miappmusica.player.feature.playlists.PlaylistDetailScreen
 import com.miappmusica.player.feature.playlists.PlaylistsScreen
 import com.miappmusica.player.feature.settings.SettingsScreen
 
@@ -56,6 +59,8 @@ private enum class Dest(val route: String, val label: String, val icon: ImageVec
 }
 
 private const val ROUTE_SETTINGS = "settings"
+const val ROUTE_PLAYLIST_DETAIL = "playlist/{playlistId}"
+fun playlistDetailRoute(id: Long) = "playlist/$id"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,13 +127,22 @@ fun AppRoot(
         ) { padding ->
             NavHost(
                 navController = navController,
-                startDestination = Dest.LIBRARY.route,
+                startDestination = Dest.PLAYLISTS.route,
                 modifier = Modifier.padding(padding)
             ) {
                 composable(Dest.LIBRARY.route) { LibraryScreen() }
-                composable(Dest.PLAYLISTS.route) { PlaylistsScreen() }
+                composable(Dest.PLAYLISTS.route) {
+                    PlaylistsScreen(onOpenPlaylist = { id -> navController.navigate(playlistDetailRoute(id)) })
+                }
                 composable(Dest.DOWNLOADS.route) { MetadataScreen() }
                 composable(ROUTE_SETTINGS) { SettingsScreen() }
+                composable(
+                    route = ROUTE_PLAYLIST_DETAIL,
+                    arguments = listOf(navArgument("playlistId") { type = NavType.LongType })
+                ) { entry ->
+                    val id = entry.arguments?.getLong("playlistId") ?: 0L
+                    PlaylistDetailScreen(playlistId = id, onBack = { navController.popBackStack() })
+                }
             }
         }
 

@@ -57,6 +57,18 @@ fun MetadataScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    val writeLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        viewModel.onWritePermissionResult(result.resultCode == android.app.Activity.RESULT_OK)
+    }
+    androidx.compose.runtime.LaunchedEffect(state.pendingWriteRequest) {
+        state.pendingWriteRequest?.let {
+            writeLauncher.launch(it)
+            viewModel.consumeWriteRequest()
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         when (state.phase) {
             MetadataPhase.SELECTION -> SelectionPhase(state, viewModel)
@@ -309,7 +321,12 @@ private fun DonePhase(state: MetadataUiState, vm: MetadataViewModel) {
     ) {
         Text("Proceso completado", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.size(8.dp))
-        Text(state.resultMessage ?: "", style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = state.resultMessage ?: "",
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
+        )
         Spacer(Modifier.size(16.dp))
         Button(onClick = { vm.backToSelection() }) { Text("Volver") }
     }

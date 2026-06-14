@@ -82,16 +82,33 @@ class MetadataRepositoryImpl @Inject constructor(
 
     override suspend fun apply(diff: MetadataDiff): Result<Unit> {
         if (!diff.accepted) return Result.success(Unit)
-        val path = pathFor(diff) ?: return Result.failure(
-            IllegalStateException("No se encontró la ruta del archivo para ${diff.trackUri}")
-        )
-
-        val artworkBytes = resolveArtworkBytes(diff)
-        val result = tagIo.write(path, diff.proposed, artworkBytes)
-        if (result.isSuccess) {
-            mediaStore.notifyChanged(Uri.parse(diff.trackUri))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val uri = Uri.parse(diff.trackUri)
+                val ext = (pathFor(diff)?.substringAfterLast('.', "mp3") ?: "mp3").take(5)
+                val tmp = java.io.File(context.cacheDir, "edit_${diff.trackId}.$ext")
+                // 1) copy original -> cache
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    tmp.outputStream().use { input.copyTo(it) }
+                } ?: error("No se pudo leer el archivo de audio")
+                // 2) edit cache copy (always writable)
+                val artworkBytes = resolveArtworkBytes(diff)
+                tagIo.write(tmp.absolutePath, diff.proposed, artworkBytes).getOrThrow()
+                // 3) write cache copy back through the resolver (needs the write grant on API 29+)
+                context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    tmp.inputStream().use { it.copyTo(out) }
+                } ?: error("No se pudo escribir en el archivo (permiso denegado)")
+                tmp.delete()
+                mediaStore.notifyChanged(uri)
+            }
         }
-        return result
+    }
+
+    override fun buildWriteRequest(diffs: List<MetadataDiff>): android.content.IntentSender? {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return null
+        val uris = diffs.filter { it.accepted }.map { Uri.parse(it.trackUri) }
+        if (uris.isEmpty()) return null
+        return android.provider.MediaStore.createWriteRequest(context.contentResolver, uris).intentSender
     }
 
     private fun pathFor(diff: MetadataDiff): String? {

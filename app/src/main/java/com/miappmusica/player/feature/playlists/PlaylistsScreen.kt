@@ -64,6 +64,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun PlaylistsScreen(
     modifier: Modifier = Modifier,
+    onOpenPlaylist: (Long) -> Unit = {},
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -136,6 +137,7 @@ fun PlaylistsScreen(
                     PlaylistRow(
                         playlist = playlist,
                         cover = state.covers[playlist.id],
+                        onOpen = { onOpenPlaylist(playlist.id) },
                         onPlay = { viewModel.playPlaylist(playlist) },
                         onChangeCover = {
                             pendingCoverId = playlist.id
@@ -225,6 +227,7 @@ private fun ImportExportRow(onImport: (String) -> Unit, onExport: (String) -> Un
 private fun PlaylistRow(
     playlist: Playlist,
     cover: String?,
+    onOpen: () -> Unit,
     onPlay: () -> Unit,
     onChangeCover: () -> Unit,
     onRename: () -> Unit,
@@ -232,7 +235,7 @@ private fun PlaylistRow(
 ) {
     var menu by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onPlay).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
