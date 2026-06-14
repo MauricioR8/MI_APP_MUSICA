@@ -27,6 +27,7 @@ class UserPreferences @Inject constructor(
     private val samsungHomeKey = booleanPreferencesKey("samsung_home")
     private val autoArtworkKey = booleanPreferencesKey("auto_artwork_online")
     private val accentColorKey = longPreferencesKey("accent_color")
+    private val playerBackgroundKey = longPreferencesKey("player_background")
     private val lyricsEnabledKey = booleanPreferencesKey("lyrics_enabled")
     private val lyricsOfflineOnlyKey = booleanPreferencesKey("lyrics_offline_only")
 
@@ -45,6 +46,7 @@ class UserPreferences @Inject constructor(
             samsungHome = prefs[samsungHomeKey] ?: true,
             autoArtworkOnline = prefs[autoArtworkKey] ?: true,
             accentColorArgb = prefs[accentColorKey] ?: 0L,
+            playerBackgroundArgb = prefs[playerBackgroundKey] ?: 0L,
             lyricsEnabled = prefs[lyricsEnabledKey] ?: true,
             lyricsOfflineOnly = prefs[lyricsOfflineOnlyKey] ?: false
         )
@@ -68,6 +70,10 @@ class UserPreferences @Inject constructor(
 
     suspend fun setAccentColor(argb: Long) {
         context.dataStore.edit { it[accentColorKey] = argb }
+    }
+
+    suspend fun setPlayerBackground(argb: Long) {
+        context.dataStore.edit { it[playerBackgroundKey] = argb }
     }
 
     suspend fun setLyricsEnabled(enabled: Boolean) {

@@ -9,5 +9,7 @@ data class LyricsEntity(
     val artist: String,
     val title: String,
     val text: String,
+    /** Timestamped LRC lyrics ("[mm:ss.xx] line"); empty when only plain lyrics are available. */
+    val synced: String = "",
     val savedAt: Long = System.currentTimeMillis()
 )

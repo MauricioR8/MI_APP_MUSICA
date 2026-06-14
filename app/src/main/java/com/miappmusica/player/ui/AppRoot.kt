@@ -73,6 +73,9 @@ fun AppRoot(
     val isFavorite by playerViewModel.isCurrentFavorite.collectAsStateWithLifecycle()
     val queue by playerViewModel.queue.collectAsStateWithLifecycle()
     val playlists by playerViewModel.playlists.collectAsStateWithLifecycle()
+    val playerBackground by playerViewModel.playerBackground.collectAsStateWithLifecycle()
+
+    val playerBg = playerBackground.takeIf { it != 0L }?.let { androidx.compose.ui.graphics.Color(it) }
 
     var showPlayer by remember { mutableStateOf(false) }
 
@@ -138,7 +141,10 @@ fun AppRoot(
                     )
                 }
                 composable(ROUTE_MODES) {
-                    ModesManagerScreen(onBack = { navController.popBackStack() })
+                    ModesManagerScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenModePlaylist = { id -> navController.navigate(playlistDetailRoute(id)) }
+                    )
                 }
                 composable(
                     route = ROUTE_TRACK_LIST,
@@ -166,7 +172,7 @@ fun AppRoot(
             enter = slideInVertically { it },
             exit = slideOutVertically { it }
         ) {
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Surface(Modifier.fillMaxSize(), color = playerBg ?: MaterialTheme.colorScheme.background) {
                 NowPlayingScreen(
                     state = nowPlaying,
                     onTogglePlay = playerViewModel::togglePlayPause,
@@ -185,7 +191,8 @@ fun AppRoot(
                     onPlayQueueIndex = playerViewModel::playQueueIndex,
                     playlists = playlists,
                     onAddToPlaylist = playerViewModel::addCurrentToPlaylist,
-                    onCreatePlaylist = playerViewModel::createPlaylistWithCurrent
+                    onCreatePlaylist = playerViewModel::createPlaylistWithCurrent,
+                    backgroundColor = playerBg
                 )
             }
         }

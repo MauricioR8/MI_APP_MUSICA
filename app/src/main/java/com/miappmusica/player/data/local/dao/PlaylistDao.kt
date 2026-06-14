@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface PlaylistDao {
 
-    @Query("SELECT * FROM playlists ORDER BY isSystem DESC, createdAt ASC")
+    @Query("SELECT * FROM playlists ORDER BY isSystem DESC, sortOrder ASC, createdAt ASC")
     fun observePlaylists(): Flow<List<PlaylistEntity>>
 
     @Query("SELECT * FROM playlists WHERE id = :id")
@@ -32,6 +32,12 @@ interface PlaylistDao {
 
     @Query("UPDATE playlists SET coverUri = :uri WHERE id = :id")
     suspend fun setCover(id: Long, uri: String?)
+
+    @Query("UPDATE playlists SET sortOrder = :order WHERE id = :id")
+    suspend fun setSortOrder(id: Long, order: Int)
+
+    @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM playlists")
+    suspend fun nextSortOrder(): Int
 
     @Query("DELETE FROM playlists WHERE id = :id")
     suspend fun deletePlaylist(id: Long)

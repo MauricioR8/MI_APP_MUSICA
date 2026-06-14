@@ -167,7 +167,8 @@ fun NowPlayingScreen(
     onPlayQueueIndex: (Int) -> Unit = {},
     playlists: List<Playlist> = emptyList(),
     onAddToPlaylist: (Long) -> Unit = {},
-    onCreatePlaylist: (String) -> Unit = {}
+    onCreatePlaylist: (String) -> Unit = {},
+    backgroundColor: Color? = null
 ) {
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
@@ -179,7 +180,7 @@ fun NowPlayingScreen(
     val duration = state.durationMs.coerceAtLeast(1L)
     val sliderValue = if (dragging) dragValue else state.positionMs.toFloat().coerceIn(0f, duration.toFloat())
 
-    Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(modifier = modifier.fillMaxSize().background(backgroundColor ?: MaterialTheme.colorScheme.background)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -403,7 +404,11 @@ private fun LyricsOverlay(
                         Modifier.align(Alignment.Center),
                         color = Color.White
                     )
-                    is LyricsResult.Available -> SyncedLyrics(text = lyrics.text, state = state)
+                    is LyricsResult.Available -> SyncedLyrics(
+                        plain = lyrics.plain,
+                        synced = lyrics.synced,
+                        state = state
+                    )
                     LyricsResult.NotFound -> Text(
                         "No se encontraron letras",
                         style = MaterialTheme.typography.bodyLarge,
@@ -440,16 +445,65 @@ private fun LyricsOverlay(
 }
 
 /**
- * Spotify-style lyrics: highlights the approximate current line based on playback progress and
- * auto-scrolls to keep it in view. This is an approximation (no real LRC timing).
+ * Lyrics display. When timestamped LRC ([synced]) is available it highlights the exact current
+ * line based on real playback position and auto-scrolls to it (accurate, no desync). Otherwise it
+ * falls back to a static, scrollable plain-text view (no misleading position-based highlight).
  */
 @Composable
-private fun SyncedLyrics(text: String, state: NowPlayingState) {
-    // Guard against empty/blank lyrics so we never render an empty (confusing) overlay or crash.
-    val lines = remember(text) { text.split("\n") }
-    val hasContent = remember(lines) { lines.any { it.isNotBlank() } }
+private fun SyncedLyrics(plain: String, synced: String?, state: NowPlayingState) {
+    val listState = rememberLazyListState()
 
-    if (text.isBlank() || lines.isEmpty() || !hasContent) {
+    // Parse LRC lines into (timeMs, text) pairs, sorted by time.
+    val regex = remember { Regex("""\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\](.*)""") }
+    val parsed = remember(synced) {
+        if (synced.isNullOrBlank()) {
+            emptyList()
+        } else {
+            synced.lineSequence().mapNotNull { line ->
+                val m = regex.find(line) ?: return@mapNotNull null
+                val min = m.groupValues[1].toIntOrNull() ?: return@mapNotNull null
+                val sec = m.groupValues[2].toIntOrNull() ?: return@mapNotNull null
+                val freq = m.groupValues[3]
+                val frac = if (freq.isBlank()) 0 else (freq.padEnd(3, '0').take(3)).toIntOrNull() ?: 0
+                val ms = (min * 60 + sec) * 1000L + frac
+                ms to m.groupValues[4].trim()
+            }.toList().sortedBy { it.first }
+        }
+    }
+
+    if (parsed.isNotEmpty()) {
+        val activeIndex = remember(state.positionMs, parsed) {
+            parsed.indexOfLast { it.first <= state.positionMs }.coerceAtLeast(0)
+        }
+        LaunchedEffect(activeIndex) {
+            runCatching { listState.animateScrollToItem(activeIndex.coerceAtLeast(0)) }
+        }
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            itemsIndexed(parsed) { index, pair ->
+                val text = pair.second
+                if (text.isBlank()) {
+                    Spacer(Modifier.size(10.dp))
+                } else {
+                    val isActive = index == activeIndex
+                    Text(
+                        text = text,
+                        style = if (isActive) MaterialTheme.typography.titleMedium
+                        else MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isActive) MaterialTheme.colorScheme.primary
+                        else Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    )
+                }
+            }
+        }
+        return
+    }
+
+    // Fallback: plain text (static, scrollable). No fake highlight, so it can't be "way off".
+    val lines = remember(plain) { plain.split("\n") }
+    val hasContent = remember(lines) { lines.any { it.isNotBlank() } }
+    if (plain.isBlank() || !hasContent) {
         Text(
             "No se encontraron letras",
             style = MaterialTheme.typography.bodyLarge,
@@ -457,39 +511,15 @@ private fun SyncedLyrics(text: String, state: NowPlayingState) {
         )
         return
     }
-
-    val activeLine = if (state.durationMs > 0 && lines.isNotEmpty()) {
-        ((state.positionMs.toFloat() / state.durationMs) * lines.size)
-            .toInt()
-            .coerceIn(0, lines.lastIndex)
-    } else {
-        0
-    }
-
-    val listState = rememberLazyListState()
-    LaunchedEffect(activeLine) {
-        if (lines.isNotEmpty()) {
-            runCatching { listState.animateScrollToItem(activeLine.coerceIn(0, lines.lastIndex)) }
-        }
-    }
-
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize()
-    ) {
-        itemsIndexed(lines) { index, line ->
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+        items(lines) { line ->
             if (line.isBlank()) {
-                // Keep blank lines as a thin spacer so index<->position mapping stays correct.
                 Spacer(Modifier.size(10.dp))
             } else {
-                val isActive = index == activeLine
                 Text(
                     text = line,
-                    style = if (isActive) MaterialTheme.typography.titleMedium
-                    else MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isActive) MaterialTheme.colorScheme.primary
-                    else Color.White.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White.copy(alpha = 0.85f),
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                 )
             }

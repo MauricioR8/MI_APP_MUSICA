@@ -32,6 +32,7 @@ interface PlaylistRepository {
     suspend fun addTrack(playlistId: Long, trackId: Long)
     suspend fun removeTrack(playlistId: Long, trackId: Long)
     suspend fun getPlaylist(id: Long): Playlist?
+    suspend fun reorder(orderedIds: List<Long>)
 }
 
 interface ModeRepository {

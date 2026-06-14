@@ -68,6 +68,7 @@ private val ModeIconKeys: List<String> = listOf("home", "fitness", "focus", "sad
 @Composable
 fun ModesManagerScreen(
     onBack: () -> Unit,
+    onOpenModePlaylist: (Long) -> Unit = {},
     viewModel: ModesViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -104,6 +105,7 @@ fun ModesManagerScreen(
             items(state.modes, key = { it.id }) { mode ->
                 ModeRow(
                     mode = mode,
+                    onOpen = { mode.isolatedPlaylistId?.let(onOpenModePlaylist) },
                     onEdit = {
                         editing = mode
                         editorVisible = true
@@ -130,8 +132,8 @@ fun ModesManagerScreen(
         ModeEditorDialog(
             existing = editing,
             playlists = playlists,
-            onSave = { mode ->
-                viewModel.upsert(mode)
+            onSave = { existingId, label, iconKey, colorArgb, isolatedPlaylistId, autoPlay ->
+                viewModel.saveMode(existingId, label, iconKey, colorArgb, isolatedPlaylistId, autoPlay)
                 editorVisible = false
             },
             onDismiss = { editorVisible = false }
@@ -142,11 +144,15 @@ fun ModesManagerScreen(
 @Composable
 private fun ModeRow(
     mode: AppMode,
+    onOpen: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier
+            .fillMaxWidth()
+            .clickable(enabled = mode.isolatedPlaylistId != null, onClick = onOpen)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(iconForKey(mode.iconKey), contentDescription = null)
@@ -159,7 +165,11 @@ private fun ModeRow(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                if (mode.isNormal) "Modo base (no editable)" else "Modo personalizado",
+                when {
+                    mode.isNormal -> "Modo base (biblioteca completa)"
+                    mode.isolatedPlaylistId != null -> "Lista propia · toca para editar sus canciones"
+                    else -> "Modo personalizado"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
@@ -179,7 +189,14 @@ private fun ModeRow(
 private fun ModeEditorDialog(
     existing: AppMode?,
     playlists: List<Playlist>,
-    onSave: (AppMode) -> Unit,
+    onSave: (
+        existingId: String?,
+        label: String,
+        iconKey: String,
+        colorArgb: Long,
+        isolatedPlaylistId: Long?,
+        autoPlay: Boolean
+    ) -> Unit,
     onDismiss: () -> Unit
 ) {
     var label by remember { mutableStateOf(existing?.label ?: "") }
@@ -273,14 +290,14 @@ private fun ModeEditorDialog(
                 }
 
                 Text(
-                    "Playlist aislada",
+                    "Playlist del modo",
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
                 )
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 160.dp)) {
                     item {
                         PlaylistChoiceRow(
-                            name = "Ninguna",
+                            name = if (existing == null) "Crear lista propia (memoria independiente)" else "Ninguna",
                             selected = selectedPlaylist == null,
                             onClick = { selectedPlaylist = null }
                         )
@@ -306,16 +323,14 @@ private fun ModeEditorDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val mode = AppMode(
-                        id = existing?.id ?: ("mode_" + System.currentTimeMillis()),
-                        label = label.trim().ifBlank { "Modo" },
-                        iconKey = selectedIcon,
-                        accentColorArgb = selectedColor,
-                        isolatedPlaylistId = selectedPlaylist,
-                        autoPlay = autoPlay,
-                        isBuiltIn = existing?.isBuiltIn ?: false
+                    onSave(
+                        existing?.id,
+                        label.trim().ifBlank { "Modo" },
+                        selectedIcon,
+                        selectedColor,
+                        selectedPlaylist,
+                        autoPlay
                     )
-                    onSave(mode)
                 },
                 enabled = label.isNotBlank()
             ) { Text("Guardar") }

@@ -83,6 +83,11 @@ class PlaylistsViewModel @Inject constructor(
         viewModelScope.launch { playlistRepository.rename(id, name) }
     }
 
+    /** Persists a new manual order for the playlists (drag-to-reorder / move up-down). */
+    fun reorder(orderedIds: List<Long>) {
+        viewModelScope.launch { playlistRepository.reorder(orderedIds) }
+    }
+
     /** Sets a manual cover image (gallery content:// URI) for a playlist/album. */
     fun setCover(id: Long, coverUri: String) {
         viewModelScope.launch { playlistRepository.setCover(id, coverUri) }

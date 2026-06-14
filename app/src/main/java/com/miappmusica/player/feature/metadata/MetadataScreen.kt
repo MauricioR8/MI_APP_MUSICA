@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -142,8 +143,37 @@ private fun SelectionPhase(state: MetadataUiState, vm: MetadataViewModel) {
             OutlinedButton(onClick = { vm.clearSelection() }) { Text("Limpiar") }
         }
 
+        // Search box: filters the list but never affects the (persisted) selection.
+        var query by remember { mutableStateOf("") }
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = { Text("Buscar canción") },
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        )
+        Text(
+            "Para limpiar: ${state.selectedCount} seleccionadas",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+        )
+
+        val shown = remember(query, state.candidates) {
+            if (query.isBlank()) {
+                state.candidates
+            } else {
+                state.candidates.filter {
+                    it.title.contains(query, ignoreCase = true) ||
+                        it.displayArtist.contains(query, ignoreCase = true) ||
+                        it.displayAlbum.contains(query, ignoreCase = true)
+                }
+            }
+        }
+
         LazyColumn(Modifier.weight(1f).padding(top = 8.dp)) {
-            items(state.candidates, key = { it.id }) { track ->
+            items(shown, key = { it.id }) { track ->
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically

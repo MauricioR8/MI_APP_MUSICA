@@ -11,7 +11,9 @@ data class PlaylistEntity(
     val description: String = "",
     val coverUri: String? = null,
     val isSystem: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** Manual ordering for the playlists list (drag-to-reorder); lower comes first. */
+    val sortOrder: Int = 0
 )
 
 @Entity(

@@ -66,6 +66,40 @@ class ModesViewModel @Inject constructor(
         viewModelScope.launch { modeRepository.upsert(mode) }
     }
 
+    /**
+     * Saves a mode from the editor. A brand-new non-Normal mode that doesn't reuse an existing
+     * playlist gets its OWN private backing playlist, giving each mode independent memory: edits
+     * made while in that mode only affect that mode's songs.
+     */
+    fun saveMode(
+        existingId: String?,
+        label: String,
+        iconKey: String,
+        colorArgb: Long,
+        isolatedPlaylistId: Long?,
+        autoPlay: Boolean
+    ) {
+        viewModelScope.launch {
+            val id = existingId ?: ("mode_" + System.currentTimeMillis())
+            var playlistId = isolatedPlaylistId
+            if (existingId == null && playlistId == null) {
+                // Give the new mode its own private playlist (independent memory).
+                playlistId = playlistRepository.create("Modo: $label")
+            }
+            modeRepository.upsert(
+                AppMode(
+                    id = id,
+                    label = label,
+                    iconKey = iconKey,
+                    accentColorArgb = colorArgb,
+                    isolatedPlaylistId = playlistId,
+                    autoPlay = autoPlay,
+                    isBuiltIn = false
+                )
+            )
+        }
+    }
+
     fun delete(modeId: String) {
         viewModelScope.launch { modeRepository.delete(modeId) }
     }

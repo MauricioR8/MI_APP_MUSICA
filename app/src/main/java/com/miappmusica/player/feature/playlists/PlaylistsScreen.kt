@@ -5,6 +5,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MoreVert
@@ -48,7 +52,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -68,7 +74,24 @@ fun PlaylistsScreen(
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val sorted = remember(state.playlists) { state.playlists.sortedBy { it.name.uppercase() } }
+    // Local, live-editable copy used during drag-to-reorder. Resets whenever the persisted order
+    // changes (e.g. after reorder() round-trips through the DB).
+    var orderedPlaylists by remember(state.playlists) { mutableStateOf(state.playlists) }
+    var draggingId by remember { mutableStateOf<Long?>(null) }
+    var dragAccumulator by remember { mutableStateOf(0f) }
+    val density = LocalDensity.current
+    val rowThresholdPx = with(density) { 64.dp.toPx() }
+
+    fun moveItem(id: Long, delta: Int) {
+        val idx = orderedPlaylists.indexOfFirst { it.id == id }
+        val target = idx + delta
+        if (idx < 0 || target < 0 || target > orderedPlaylists.lastIndex) return
+        val updated = orderedPlaylists.toMutableList()
+        val moved = updated.removeAt(idx)
+        updated.add(target, moved)
+        orderedPlaylists = updated
+        viewModel.reorder(updated.map { it.id })
+    }
 
     var showCreate by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Playlist?>(null) }
@@ -149,10 +172,48 @@ fun PlaylistsScreen(
                     }
                 }
 
-                items(sorted, key = { it.id }) { playlist ->
+                items(orderedPlaylists, key = { it.id }) { playlist ->
+                    val dragModifier = Modifier.pointerInput(playlist.id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                draggingId = playlist.id
+                                dragAccumulator = 0f
+                            },
+                            onDragEnd = {
+                                viewModel.reorder(orderedPlaylists.map { it.id })
+                                draggingId = null
+                                dragAccumulator = 0f
+                            },
+                            onDragCancel = {
+                                draggingId = null
+                                dragAccumulator = 0f
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragAccumulator += dragAmount.y
+                                val curIdx = orderedPlaylists.indexOfFirst { it.id == playlist.id }
+                                if (curIdx < 0) return@detectDragGesturesAfterLongPress
+                                if (dragAccumulator >= rowThresholdPx && curIdx < orderedPlaylists.lastIndex) {
+                                    val updated = orderedPlaylists.toMutableList()
+                                    val moved = updated.removeAt(curIdx)
+                                    updated.add(curIdx + 1, moved)
+                                    orderedPlaylists = updated
+                                    dragAccumulator = 0f
+                                } else if (dragAccumulator <= -rowThresholdPx && curIdx > 0) {
+                                    val updated = orderedPlaylists.toMutableList()
+                                    val moved = updated.removeAt(curIdx)
+                                    updated.add(curIdx - 1, moved)
+                                    orderedPlaylists = updated
+                                    dragAccumulator = 0f
+                                }
+                            }
+                        )
+                    }
                     PlaylistRow(
                         playlist = playlist,
                         cover = state.covers[playlist.id],
+                        dragging = draggingId == playlist.id,
+                        dragModifier = dragModifier,
                         onOpen = { onOpenPlaylist(playlist.id) },
                         onPlay = { viewModel.playPlaylist(playlist) },
                         onChangeCover = {
@@ -162,7 +223,9 @@ fun PlaylistsScreen(
                             )
                         },
                         onRename = { renameTarget = playlist },
-                        onDelete = { viewModel.delete(playlist.id) }
+                        onDelete = { viewModel.delete(playlist.id) },
+                        onMoveUp = { moveItem(playlist.id, -1) },
+                        onMoveDown = { moveItem(playlist.id, 1) }
                     )
                 }
             }
@@ -173,7 +236,7 @@ fun PlaylistsScreen(
             modifier = Modifier.align(Alignment.CenterEnd),
             onLetter = { letter ->
                 val headerOffset = 1 // only the smart cards rail precedes the playlist items
-                val idx = sorted.indexOfFirst { it.name.uppercase().startsWith(letter) }
+                val idx = orderedPlaylists.indexOfFirst { it.name.uppercase().startsWith(letter) }
                 if (idx >= 0) scope.launch { listState.animateScrollToItem(idx + headerOffset) }
             }
         )
@@ -225,17 +288,36 @@ private fun lastCover(tracks: List<com.miappmusica.player.domain.model.Track>): 
 private fun PlaylistRow(
     playlist: Playlist,
     cover: String?,
+    dragging: Boolean,
+    dragModifier: Modifier,
     onOpen: () -> Unit,
     onPlay: () -> Unit,
     onChangeCover: () -> Unit,
     onRename: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
+    val rowBackground = if (dragging) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    } else {
+        Color.Transparent
+    }
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 8.dp),
+        dragModifier
+            .fillMaxWidth()
+            .background(rowBackground)
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Icon(
+            Icons.Filled.DragHandle,
+            contentDescription = "Mantén presionado para reordenar",
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+        )
+        Spacer(Modifier.width(8.dp))
         Box(
             Modifier.size(56.dp).clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
@@ -257,6 +339,16 @@ private fun PlaylistRow(
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Más") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Subir") },
+                    leadingIcon = { Icon(Icons.Filled.ArrowUpward, null) },
+                    onClick = { menu = false; onMoveUp() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Bajar") },
+                    leadingIcon = { Icon(Icons.Filled.ArrowDownward, null) },
+                    onClick = { menu = false; onMoveDown() }
+                )
                 DropdownMenuItem(
                     text = { Text("Cambiar portada") },
                     leadingIcon = { Icon(Icons.Filled.Image, null) },

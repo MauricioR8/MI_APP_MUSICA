@@ -47,6 +47,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setAccentColor(argb) }
     }
 
+    fun setPlayerBackground(argb: Long) {
+        viewModelScope.launch { prefs.setPlayerBackground(argb) }
+    }
+
     fun setLyricsEnabled(enabled: Boolean) {
         viewModelScope.launch { prefs.setLyricsEnabled(enabled) }
     }

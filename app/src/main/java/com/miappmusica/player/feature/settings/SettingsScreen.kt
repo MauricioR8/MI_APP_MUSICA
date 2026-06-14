@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Tune
@@ -38,14 +39,22 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miappmusica.player.domain.model.DarkMode
 
@@ -74,9 +83,32 @@ fun SettingsScreen(
     } else {
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
+    var audioGranted by remember { mutableStateOf(false) }
+    var allFilesGranted by remember { mutableStateOf(false) }
+
+    fun recheck() {
+        audioGranted = ContextCompat.checkSelfPermission(context, audioPermission) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        allFilesGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            android.os.Environment.isExternalStorageManager()
+        } else {
+            audioGranted
+        }
+    }
+
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { }
+    ) { granted -> audioGranted = granted; recheck() }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) recheck()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        recheck()
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("Ajustes", style = MaterialTheme.typography.titleLarge)
@@ -134,6 +166,22 @@ fun SettingsScreen(
         AccentColorPicker(
             selected = settings.accentColorArgb,
             onSelect = viewModel::setAccentColor
+        )
+
+        Text(
+            "Color de fondo",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+        )
+        Text(
+            "Fondo del reproductor a pantalla completa.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        BackgroundColorPicker(
+            selected = settings.playerBackgroundArgb,
+            onSelect = viewModel::setPlayerBackground
         )
 
         Divider(Modifier.padding(vertical = 12.dp))
@@ -261,6 +309,14 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
             }
+            if (audioGranted) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = "Concedido",
+                    tint = Color(0xFF2E7D32),
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+            }
             Button(onClick = { permLauncher.launch(audioPermission) }) { Text("Conceder") }
         }
 
@@ -274,6 +330,14 @@ fun SettingsScreen(
                     "Permite editar etiquetas y eliminar canciones sin pedir confirmación cada vez",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+            if (allFilesGranted) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = "Concedido",
+                    tint = Color(0xFF2E7D32),
+                    modifier = Modifier.padding(end = 8.dp)
                 )
             }
             Button(onClick = {
@@ -389,6 +453,7 @@ private fun AccentColorPicker(
 
 @Composable
 private fun SwitchRow(
+
     title: String,
     subtitle: String,
     checked: Boolean,
@@ -404,5 +469,69 @@ private fun SwitchRow(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+private val PlayerBackgroundPalette: List<Long> = listOf(
+    0L,            // Predeterminado (usa el fondo del tema)
+    0xFF000000,
+    0xFF101014,
+    0xFF1B1430,
+    0xFF0D1B2A,
+    0xFF1A1A2E,
+    0xFF2C1810,
+    0xFFFFFFFF
+)
+
+@Composable
+private fun BackgroundColorPicker(
+    selected: Long,
+    onSelect: (Long) -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PlayerBackgroundPalette.forEach { argb ->
+            val isSelected = selected == argb
+            val isDefault = argb == 0L
+            // Default swatch shows the theme background so the user knows it means "no custom color".
+            val swatchColor = if (isDefault) MaterialTheme.colorScheme.surfaceVariant else Color(argb)
+            // Pick a contrasting check tint for very light backgrounds.
+            val checkTint = if (argb == 0xFFFFFFFF || isDefault) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                Color.White
+            }
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(swatchColor)
+                    .border(
+                        width = if (isSelected) 3.dp else 1.dp,
+                        color = if (isSelected) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                        shape = CircleShape
+                    )
+                    .clickable { onSelect(argb) },
+                contentAlignment = Alignment.Center
+            ) {
+                when {
+                    isSelected -> Icon(
+                        Icons.Filled.Check,
+                        contentDescription = "Seleccionado",
+                        tint = checkTint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    isDefault -> Text(
+                        "Auto",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }

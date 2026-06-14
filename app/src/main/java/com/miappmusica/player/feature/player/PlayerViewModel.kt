@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.miappmusica.player.data.repository.LyricsRepository
 import com.miappmusica.player.data.repository.LyricsResult
 import com.miappmusica.player.data.repository.StatsRepository
+import com.miappmusica.player.data.prefs.UserPreferences
 import com.miappmusica.player.domain.model.Playlist
 import com.miappmusica.player.domain.model.Track
 import com.miappmusica.player.domain.repository.LibraryRepository
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -38,7 +40,8 @@ class PlayerViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val lyricsRepository: LyricsRepository,
     private val statsRepository: StatsRepository,
-    private val playlistRepository: PlaylistRepository
+    private val playlistRepository: PlaylistRepository,
+    private val userPreferences: UserPreferences
 ) : ViewModel() {
 
     val nowPlaying: StateFlow<NowPlayingState> = playbackConnection.nowPlaying
@@ -74,6 +77,11 @@ class PlayerViewModel @Inject constructor(
     val playlists: StateFlow<List<Playlist>> = playlistRepository.observePlaylists()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Custom player background color (0 = use the theme background). */
+    val playerBackground: StateFlow<Long> = userPreferences.settings
+        .map { it.playerBackgroundArgb }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
     init {
         playbackConnection.connect()
         // Record a play each time the current media item changes.
@@ -82,6 +90,17 @@ class PlayerViewModel @Inject constructor(
             .filter { it.isNotBlank() }
             .distinctUntilChanged()
             .onEach { mediaId -> mediaId.toLongOrNull()?.let { statsRepository.recordPlay(it) } }
+            .launchIn(viewModelScope)
+
+        // Prefetch lyrics whenever the current track changes so the overlay opens instantly
+        // (removes the click-to-load latency the user reported).
+        currentTrack
+            .filterNotNull()
+            .distinctUntilChanged { a, b -> a.id == b.id }
+            .onEach { track ->
+                _lyrics.value = LyricsResult.Loading
+                _lyrics.value = lyricsRepository.fetch(track)
+            }
             .launchIn(viewModelScope)
     }
 

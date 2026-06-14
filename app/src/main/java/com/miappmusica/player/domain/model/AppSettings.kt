@@ -13,6 +13,7 @@ data class AppSettings(
     val samsungHome: Boolean = true,
     val autoArtworkOnline: Boolean = true,
     val accentColorArgb: Long = 0L,
+    val playerBackgroundArgb: Long = 0L,
     val lyricsEnabled: Boolean = true,
     val lyricsOfflineOnly: Boolean = false
 )
