@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MI APP MUSICA</string>
+
+    <!-- Navigation -->
+    <string name="nav_library">Biblioteca</string>
+    <string name="nav_playlists">Listas</string>
+    <string name="nav_downloads">Descargados</string>
+    <string name="nav_metadata">Metadatos</string>
+
+    <!-- Modes -->
+    <string name="mode_normal">Normal</string>
+    <string name="mode_gym">Gym</string>
+    <string name="mode_focus">Enfoque</string>
+    <string name="mode_sadness">Tristeza</string>
+    <string name="mode_select">Selecciona un modo</string>
+    <string name="mode_exit">Salir del modo</string>
+
+    <!-- Metadata tool -->
+    <string name="metadata_title">Herramienta de Metadatos</string>
+    <string name="metadata_search">Analizar audios</string>
+    <string name="metadata_mode_manual">Manual</string>
+    <string name="metadata_mode_auto">Automático</string>
+    <string name="metadata_preview">Previsualizar cambios</string>
+    <string name="metadata_apply">Aplicar</string>
+    <string name="metadata_pick_image">Cargar imagen</string>
+
+    <!-- Playback -->
+    <string name="notification_channel_playback">Reproducción</string>
+    <string name="notification_channel_metadata">Procesamiento de metadatos</string>
+</resources>
