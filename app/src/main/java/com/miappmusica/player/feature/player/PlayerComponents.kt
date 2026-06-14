@@ -69,25 +69,26 @@ fun MiniPlayer(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.primary,
         contentColor = Color.White,
-        shadowElevation = 8.dp
+        shadowElevation = 4.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onExpand)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
                 model = state.artworkUri,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(40.dp).clip(CircleShape)
+                modifier = Modifier.size(32.dp).clip(CircleShape)
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     state.title.ifBlank { "Reproduciendo" },
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -99,18 +100,19 @@ fun MiniPlayer(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            IconButton(onClick = onPrevious) {
-                Icon(Icons.Filled.SkipPrevious, "Anterior", tint = Color.White)
+            IconButton(onClick = onPrevious, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.SkipPrevious, "Anterior", tint = Color.White, modifier = Modifier.size(18.dp))
             }
-            IconButton(onClick = onTogglePlay) {
+            IconButton(onClick = onTogglePlay, modifier = Modifier.size(36.dp)) {
                 Icon(
                     if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     "Reproducir/Pausar",
-                    tint = Color.White
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
                 )
             }
-            IconButton(onClick = onNext) {
-                Icon(Icons.Filled.SkipNext, "Siguiente", tint = Color.White)
+            IconButton(onClick = onNext, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.SkipNext, "Siguiente", tint = Color.White, modifier = Modifier.size(18.dp))
             }
         }
     }

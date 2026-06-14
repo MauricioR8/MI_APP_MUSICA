@@ -50,8 +50,15 @@ class MetadataRepositoryImpl @Inject constructor(
         val cleanedTitle = formatter.cleanString(splitTitle)
 
         // 2) Online enrichment (canonical names + high-res artwork), if enabled in Settings.
+        //    Wrapped in try/catch so network failures degrade gracefully to local-only heuristics.
         val online = userPreferences.settings.first().autoArtworkOnline
-        val lookup = if (online) artworkProvider.lookup(cleanedArtist, cleanedTitle) else null
+        val lookup = if (online) {
+            try {
+                artworkProvider.lookup(cleanedArtist, cleanedTitle)
+            } catch (_: Exception) {
+                null
+            }
+        } else null
 
         val proposed = TrackMetadata(
             title = cleanedTitle,

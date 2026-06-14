@@ -84,6 +84,7 @@ class MetadataViewModel @Inject constructor(
     /**
      * Builds the diff set for the current selection. AUTO derives proposals from the engine
      * (heuristics + online lookup). MANUAL seeds identity diffs the user then edits inline.
+     * Each track is processed independently so one failure does not abort the whole batch.
      */
     fun analyze() {
         val selected = _state.value.candidates.filter { _state.value.selectedIds.contains(it.id) }
@@ -93,16 +94,30 @@ class MetadataViewModel @Inject constructor(
             _state.value = _state.value.copy(isProcessing = true)
             val ctx = contextDetector.analyze(selected)
             val diffs = when (_state.value.mode) {
-                CleanMode.AUTO -> selected.map { track ->
-                    val diff = metadataRepository.buildAutoProposal(track)
-                    // When the engine is confident about a single album, propagate it across the batch.
-                    if (ctx.isSingleAlbum && ctx.dominantAlbum != null) {
-                        diff.copy(proposed = diff.proposed.copy(album = ctx.dominantAlbum))
-                    } else diff
+                CleanMode.AUTO -> selected.mapNotNull { track ->
+                    try {
+                        val diff = metadataRepository.buildAutoProposal(track)
+                        // When the engine is confident about a single album, propagate it across the batch.
+                        if (ctx.isSingleAlbum && ctx.dominantAlbum != null) {
+                            diff.copy(proposed = diff.proposed.copy(album = ctx.dominantAlbum))
+                        } else diff
+                    } catch (_: Exception) {
+                        // Graceful degradation: if a track fails, build a no-change identity diff.
+                        try {
+                            val original = metadataRepository.read(track)
+                            MetadataDiff(track.id, track.uri, original, original)
+                        } catch (_: Exception) {
+                            null // Skip completely broken tracks
+                        }
+                    }
                 }
-                CleanMode.MANUAL -> selected.map { track ->
-                    val original = metadataRepository.read(track)
-                    MetadataDiff(track.id, track.uri, original, original)
+                CleanMode.MANUAL -> selected.mapNotNull { track ->
+                    try {
+                        val original = metadataRepository.read(track)
+                        MetadataDiff(track.id, track.uri, original, original)
+                    } catch (_: Exception) {
+                        null
+                    }
                 }
             }
             _state.value = _state.value.copy(
