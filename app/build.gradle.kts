@@ -10,12 +10,17 @@ android {
     namespace = "com.miappmusica.player"
     compileSdk = 35
 
+    // CI inyecta VERSION_CODE / VERSION_NAME por cada build para que cada APK sea una
+    // version distinta. En local usa los valores por defecto.
+    val ciVersionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
+    val ciVersionName = System.getenv("VERSION_NAME") ?: "1.0.0"
+
     defaultConfig {
         applicationId = "com.miappmusica.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = ciVersionCode
+        versionName = ciVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

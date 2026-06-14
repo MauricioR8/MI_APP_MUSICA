@@ -15,6 +15,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Cada build produce una version distinta (numero de ejecucion del workflow).
+  VERSION_CODE: ${{ github.run_number }}
+  VERSION_NAME: 1.0.${{ github.run_number }}
+
 jobs:
   build:
     name: Assemble & publish APKs
@@ -51,52 +56,53 @@ jobs:
       - name: Build release APK
         run: ./gradlew :app:assembleRelease --stacktrace
 
-      # Rename to friendly, predictable filenames for the Release page.
+      # Nombres de archivo unicos por version (no se repiten entre builds).
       - name: Collect APKs
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk \
-             "dist/MI_APP_MUSICA-debug-b${{ github.run_number }}.apk"
+             "dist/MI_APP_MUSICA-v${VERSION_NAME}-debug.apk"
           cp app/build/outputs/apk/release/app-release.apk \
-             "dist/MI_APP_MUSICA-release-b${{ github.run_number }}.apk"
+             "dist/MI_APP_MUSICA-v${VERSION_NAME}-release.apk"
           ls -lh dist
 
       # ---- Artefactos de Actions (respaldo) ----
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MI_APP_MUSICA-debug-apk
-          path: dist/MI_APP_MUSICA-debug-*.apk
+          name: MI_APP_MUSICA-v${{ env.VERSION_NAME }}-debug
+          path: dist/MI_APP_MUSICA-v${{ env.VERSION_NAME }}-debug.apk
           if-no-files-found: error
           retention-days: 30
 
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MI_APP_MUSICA-release-apk
-          path: dist/MI_APP_MUSICA-release-*.apk
+          name: MI_APP_MUSICA-v${{ env.VERSION_NAME }}-release
+          path: dist/MI_APP_MUSICA-v${{ env.VERSION_NAME }}-release.apk
           if-no-files-found: error
           retention-days: 30
 
-      # ---- Descarga directa: GitHub Release (solo en push/manual, no en PR) ----
-      # Mantiene una release fija con tag "latest" que se actualiza en cada build.
-      # Enlace directo siempre disponible en la pestaña "Releases" del repositorio.
-      - name: Publish APK to GitHub Release (latest)
+      # ---- Descarga directa: una Release NUEVA por cada build (nombre/tag unicos) ----
+      # 'releases/latest' siempre apunta a la mas reciente, pero cada version tiene su
+      # propio nombre/tag para que nunca descargues la misma dos veces.
+      - name: Publish unique GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: "MI APP MUSICA - ultima build (#${{ github.run_number }})"
+          tag_name: v${{ env.VERSION_NAME }}
+          name: "MI APP MUSICA v${{ env.VERSION_NAME }}"
           body: |
-            APK generado automaticamente desde el commit ${{ github.sha }}.
+            Version v${{ env.VERSION_NAME }} (build #${{ github.run_number }}).
+            Generada automaticamente desde el commit ${{ github.sha }}.
 
-            - **MI_APP_MUSICA-debug-*.apk**: version de depuracion, instalable directamente.
-            - **MI_APP_MUSICA-release-*.apk**: version optimizada (R8), firmada con la debug key (instalable).
+            - **MI_APP_MUSICA-v${{ env.VERSION_NAME }}-debug.apk**: depuracion, instalable directamente.
+            - **MI_APP_MUSICA-v${{ env.VERSION_NAME }}-release.apk**: optimizada (R8), firmada con la debug key.
 
-            Descarga el archivo .apk de abajo, transfierelo al telefono e instalalo
+            Descarga el .apk de abajo, transfierelo al telefono e instalalo
             (habilita "instalar apps de origen desconocido" si el sistema lo pide).
           files: |
-            dist/MI_APP_MUSICA-debug-b${{ github.run_number }}.apk
-            dist/MI_APP_MUSICA-release-b${{ github.run_number }}.apk
+            dist/MI_APP_MUSICA-v${{ env.VERSION_NAME }}-debug.apk
+            dist/MI_APP_MUSICA-v${{ env.VERSION_NAME }}-release.apk
           make_latest: true
           fail_on_unmatched_files: true
